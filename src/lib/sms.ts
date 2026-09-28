@@ -28,7 +28,10 @@ const kavenegarProvider: SmsProvider = {
   },
 };
 
-/** ملی‌پیامک — ارسال با خط خدماتی و متن الگو (bodyId) */
+/**
+ * ملی‌پیامک — وب‌سرویس خدماتی اشتراکی با الگوی تأییدشده (bodyId)؛ کد جای {0} در الگو می‌نشیند.
+ * رمز: بهتر است «کلید API» پنل (بخش توسعه‌دهندگان) باشد نه رمز ورود پنل.
+ */
 const melipayamakProvider: SmsProvider = {
   async sendOtp(phone, code) {
     const { MELIPAYAMAK_USERNAME: u, MELIPAYAMAK_PASSWORD: p, MELIPAYAMAK_BODY_ID: bodyId } = env;

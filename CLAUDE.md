@@ -28,6 +28,7 @@ npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQ
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
 npm run admin:grant -- 09xxxxxxxxx   # ادمین کردن کاربر (لغو: --revoke)
+npm run sms:test -- 09xxxxxxxxx      # آزمایش پنل پیامک (ملی‌پیامک) با تنظیمات .env
 npm run db:seed        # ۴ کاربر و آگهی نمونه (فقط توسعه)
 npm run build && npm start   # start اول migration می‌زند
 ```

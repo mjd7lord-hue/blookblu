@@ -16,6 +16,7 @@
     "test:db": "tsx scripts/test-db.ts",
     "storage:check": "tsx scripts/storage-check.ts",
     "admin:grant": "tsx scripts/admin-grant.ts",
+    "sms:test": "tsx scripts/sms-test.ts",
     "start:server": "node dist/server.js"
   },
   "license": "UNLICENSED",
