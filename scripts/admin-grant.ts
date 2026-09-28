@@ -1,5 +1,5 @@
 /**
- * ادمین کردن یک کاربر (باید قبلاً با OTP وارد اپ شده باشد).
+ * ادمین کردن یک کاربر. اگر با این شماره حسابی نباشد، ساخته می‌شود (بعداً با همین شماره و OTP وارد می‌شوی).
  *   npm run admin:grant -- 09121234567
  *   npm run admin:grant -- 09121234567 --revoke
  * روی همان دیتابیسی کار می‌کند که DATABASE_URL در .env نشان می‌دهد.
@@ -18,7 +18,13 @@ async function main() {
     .set({ isAdmin: !revoke, updatedAt: new Date() })
     .where(eq(users.phone, phone))
     .returning({ id: users.id, status: users.status });
-  if (!u) throw new Error(`کاربری با شمارهٔ ${phone} نیست؛ اول یک بار با همین شماره وارد اپ شو`);
+  if (!u) {
+    if (revoke) throw new Error(`کاربری با شمارهٔ ${phone} نیست`);
+    await db.insert(users).values({ phone, isAdmin: true });
+    console.log(`✅ حساب تازه با شمارهٔ ${phone} ساخته شد و ادمین است`);
+    return;
+  }
+  if (u.status === 'deleted') throw new Error('این حساب حذف شده است');
   console.log(revoke ? `✅ ${phone} دیگر ادمین نیست` : `✅ ${phone} ادمین شد`);
 }
 

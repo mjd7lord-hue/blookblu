@@ -269,7 +269,7 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 ## پنل ادمین 🛡 (`/admin/*`)
 
 فقط کاربر با `is_admin` (در `/me`: `user.isAdmin`). بقیه: `403 NOT_ADMIN`.
-ادمین کردن: کاربر یک بار با OTP وارد شود، بعد در سرور: `npm run admin:grant -- 09121234567` (لغو: `--revoke`).
+ادمین کردن در سرور: `npm run admin:grant -- 09121234567` (اگر حساب نباشد ساخته می‌شود؛ لغو: `--revoke`).
 همهٔ کارها در `/admin/actions` ثبت می‌شوند. لینک عکس‌ها و مدارک امضاشده و موقت است.
 
 | متد | مسیر | بدنه | توضیح |
