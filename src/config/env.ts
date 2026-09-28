@@ -27,9 +27,12 @@ const schema = z.object({
   SMS_PROVIDER: z.enum(['console', 'kavenegar', 'melipayamak']).default('console'),
   KAVENEGAR_API_KEY: z.string().optional(),
   KAVENEGAR_TEMPLATE: z.string().default('block-otp'),
+  // الگوی جدا برای کد امضای قرارداد (اختیاری؛ اگر نبود همان الگوی ورود)
+  KAVENEGAR_SIGN_TEMPLATE: optStr,
   MELIPAYAMAK_USERNAME: z.string().optional(),
   MELIPAYAMAK_PASSWORD: z.string().optional(),
   MELIPAYAMAK_BODY_ID: z.coerce.number().optional(),
+  MELIPAYAMAK_SIGN_BODY_ID: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().optional()),
   CORS_ORIGINS: z.string().default('*'),
   // ذخیرهٔ فایل: supabase = Supabase Storage، local = پوشهٔ روی سرور (توسعه/تست)، s3 = هر سرویس سازگار با S3
   // auto (پیش‌فرض): اگر کلید Supabase تنظیم شده باشد supabase، وگرنه local

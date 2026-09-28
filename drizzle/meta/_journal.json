@@ -29,6 +29,13 @@
       "when": 1790592791490,
       "tag": "0003_kyc_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790594427728,
+      "tag": "0004_contracts_payments",
+      "breakpoints": true
     }
   ]
 }

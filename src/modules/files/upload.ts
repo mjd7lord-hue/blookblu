@@ -44,6 +44,23 @@ export function kycFiles(req: Request, res: Response, next: NextFunction) {
   });
 }
 
+const m4 = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 4, fields: 12, fieldSize: 4000 },
+});
+
+/** تا ۴ عکس اختیاری در فیلد «photos» (گزارش روزانه)؛ بدنهٔ JSON هم قبول است */
+export function optionalPhotos(req: Request, res: Response, next: NextFunction) {
+  m4.array('photos', 4)(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return next(badRequest(`حجم هر عکس حداکثر ${MAX_UPLOAD_BYTES / 1024 / 1024} مگابایت است`, 'FILE_TOO_LARGE'));
+      if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') return next(badRequest('حداکثر ۴ عکس در فیلد «photos»', 'TOO_MANY_FILES'));
+      return next(badRequest('فایل‌ها درست فرستاده نشده‌اند', 'UPLOAD_INVALID'));
+    }
+    next(err);
+  });
+}
+
 /** جلوگیری از پر کردن فضا: حداکثر ۶۰ آپلود در ۱۰ دقیقه برای هر کاربر */
 export const uploadLimiter = rateLimit({
   windowMs: 10 * 60_000,

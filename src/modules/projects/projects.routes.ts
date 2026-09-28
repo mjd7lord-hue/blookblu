@@ -1,36 +1,24 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../../db';
-import { conversations, profiles, projects, reviews, STAGES } from '../../db/schema';
+import { contracts, conversations, profiles, projects, reviews, STAGES } from '../../db/schema';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
 import { requireAuth } from '../../middlewares/auth';
 import { postMessage } from '../chat/chat.service';
+import { clientP, load, party, providerP, type Party, type Project } from './access';
 import { notify } from '../notifications/notify';
 import { publicFileUrl } from '../files/files.service';
+import { voidPendingContract } from '../contracts/contract.service';
 
-type Project = typeof projects.$inferSelect;
 const r = Router();
 r.use(requireAuth);
 
-const clientP = alias(profiles, 'client_p');
-const providerP = alias(profiles, 'provider_p');
-const party = (p: typeof clientP | typeof providerP) => ({
-  id: p.id,
-  code: p.code,
-  name: p.displayName,
-  role: p.role,
-  userId: p.userId,
-  verified: p.verified,
-  avatarFileId: p.avatarFileId,
-});
-
-function shape(row: { p: Project; client: ReturnType<typeof pick>; provider: ReturnType<typeof pick> }, userId: string, reviewed: boolean) {
+function shape(row: { p: Project; client: Party; provider: Party }, userId: string, reviewed: boolean) {
   const iAmClient = row.client.userId === userId;
-  const strip = ({ userId: _u, avatarFileId, ...x }: ReturnType<typeof pick>) => ({ ...x, avatarUrl: publicFileUrl(avatarFileId) });
+  const strip = ({ userId: _u, avatarFileId, ...x }: Party) => ({ ...x, avatarUrl: publicFileUrl(avatarFileId) });
   return {
     ...row.p,
     stageName: row.p.status === 'cancelled' ? 'لغو شده' : STAGES[row.p.stage],
@@ -47,22 +35,6 @@ function shape(row: { p: Project; client: ReturnType<typeof pick>; provider: Ret
     },
   };
 }
-function pick(x: { id: string; code: string; name: string; role: string; userId: string; verified: boolean; avatarFileId: string | null }) {
-  return x;
-}
-
-async function load(userId: string, id: string) {
-  const [row] = await db
-    .select({ p: projects, client: party(clientP), provider: party(providerP) })
-    .from(projects)
-    .innerJoin(clientP, eq(clientP.id, projects.clientProfileId))
-    .innerJoin(providerP, eq(providerP.id, projects.providerProfileId))
-    .where(eq(projects.id, id))
-    .limit(1);
-  if (!row || (row.client.userId !== userId && row.provider.userId !== userId)) throw notFound('پروژه پیدا نشد');
-  return row;
-}
-
 async function myReviewed(userId: string, projectIds: string[]) {
   if (!projectIds.length) return new Set<string>();
   const mine = db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId));
@@ -107,8 +79,12 @@ r.get(
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
     const row = await load(req.user!.id, id);
-    const reviewed = await myReviewed(req.user!.id, [id]);
-    res.json({ project: shape(row, req.user!.id, reviewed.has(id)) });
+    const [reviewed, [ctr]] = await Promise.all([
+      myReviewed(req.user!.id, [id]),
+      db.select({ status: contracts.status, number: contracts.number }).from(contracts).where(eq(contracts.projectId, id)).limit(1),
+    ]);
+    // contract: null = هنوز قرارداد تنظیم نشده
+    res.json({ project: { ...shape(row, req.user!.id, reviewed.has(id)), contract: ctr ?? null } });
   }),
 );
 
@@ -182,6 +158,7 @@ r.post(
       .where(and(eq(projects.id, id), eq(projects.status, 'active')))
       .returning();
     if (!p) throw conflict('وضعیت پروژه عوض شده', 'BAD_STAGE');
+    await voidPendingContract(id);
     await afterChange(row, p, req.user!.id, `پروژه لغو شد. دلیل: ${reason}`, 'پروژه لغو شد');
     res.json({ project: shape({ ...row, p }, req.user!.id, false) });
   }),

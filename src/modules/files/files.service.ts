@@ -1,9 +1,8 @@
 import crypto from 'crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { conversationMembers, files, type FILE_PURPOSES } from '../../db/schema';
-import { env } from '../../config/env';
-import { hmac, safeEqual } from '../../lib/crypto';
+import { conversationMembers, files, profiles, projects, type FILE_PURPOSES } from '../../db/schema';
+import { apiUrl, checkSigned, signedQuery } from '../../lib/signed';
 import { badRequest, notFound } from '../../lib/errors';
 import { removeQuiet, storage } from '../../lib/storage';
 
@@ -22,6 +21,8 @@ const RULES: Record<FilePurpose, { mimes: readonly string[]; maxBytes: number; i
   chat: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
   // کارت ملی و سلفی — فقط برای بررسی ادمین، بعد از بررسی پاک می‌شوند
   kyc: { mimes: IMAGE_MIMES, maxBytes: 8 * MB, isPublic: false },
+  // فایل پروژه و عکس گزارش روزانه — فقط دو طرف پروژه
+  project: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
 };
 export const MAX_UPLOAD_BYTES = 10 * MB;
 
@@ -70,7 +71,7 @@ export async function saveUpload(
   ownerUserId: string,
   purpose: FilePurpose,
   file: { buffer: Buffer; originalname?: string },
-  opts: { conversationId?: string } = {},
+  opts: { conversationId?: string; projectId?: string } = {},
 ): Promise<FileRow> {
   const rule = RULES[purpose];
   const mime = sniffMime(file.buffer);
@@ -99,6 +100,7 @@ export async function saveUpload(
         originalName: cleanName(file.originalname),
         isPublic: rule.isPublic,
         conversationId: opts.conversationId ?? null,
+        projectId: opts.projectId ?? null,
       })
       .returning();
     return row;
@@ -126,29 +128,19 @@ export async function purgeFiles(ids: (string | null | undefined)[]) {
 
 /* ---------- لینک ---------- */
 
-function sign(id: string, exp: number) {
-  return hmac(env.JWT_ACCESS_SECRET, `file:${id}:${exp}`).slice(0, 32);
-}
-
 /**
  * لینک فایل برای نمایش در اپ (<img src>).
  * عمومی: ثابت. خصوصی: امضاشده و موقت؛ فقط به کسی داده می‌شود که اجازهٔ دیدن دارد.
- * زمان انقضا گرد می‌شود تا لینک در بازهٔ کوتاه ثابت بماند و کش مرورگر کار کند.
  */
-export function fileUrl(f: Pick<FileRow, 'id' | 'isPublic'> | { id: string; isPublic: boolean }): string {
-  const base = `${env.PUBLIC_BASE_URL ?? ''}/api/files/${f.id}`;
-  if (f.isPublic) return base;
-  const ttl = env.FILE_URL_TTL_SECONDS;
-  const exp = Math.ceil((Date.now() / 1000 + ttl) / ttl) * ttl;
-  return `${base}?exp=${exp}&sig=${sign(f.id, exp)}`;
+export function fileUrl(f: { id: string; isPublic: boolean }): string {
+  const base = apiUrl(`/api/files/${f.id}`);
+  return f.isPublic ? base : `${base}?${signedQuery('file', f.id)}`;
 }
 
 export const publicFileUrl = (id: string | null | undefined) => (id ? fileUrl({ id, isPublic: true }) : null);
 
 export function checkSignature(id: string, exp: unknown, sig: unknown): boolean {
-  const e = Number(exp);
-  if (!Number.isFinite(e) || e * 1000 < Date.now() || typeof sig !== 'string') return false;
-  return safeEqual(sign(id, e), sig);
+  return checkSigned('file', id, exp, sig);
 }
 
 export async function getFile(id: string) {
@@ -169,6 +161,15 @@ export async function canAccess(f: FileRow, user: { id: string; isAdmin: boolean
       .where(and(eq(conversationMembers.conversationId, f.conversationId), eq(conversationMembers.userId, userId)))
       .limit(1);
     return !!m;
+  }
+  if (f.purpose === 'project' && f.projectId) {
+    const [p] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .innerJoin(profiles, sql`${profiles.id} in (${projects.clientProfileId}, ${projects.providerProfileId})`)
+      .where(and(eq(projects.id, f.projectId), eq(profiles.userId, userId)))
+      .limit(1);
+    return !!p;
   }
   return false;
 }

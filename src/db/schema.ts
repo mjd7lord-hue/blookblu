@@ -7,6 +7,8 @@ import {
   boolean,
   integer,
   bigint,
+  bigserial,
+  date,
   smallint,
   timestamp,
   jsonb,
@@ -448,7 +450,7 @@ export const projects = pgTable(
 
 /* ================= فاز ۳: فایل‌ها (عکس پروفایل، نمونه‌کار، مدارک، عکس چت) ================= */
 
-export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat', 'kyc'] as const;
+export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat', 'kyc', 'project'] as const;
 export const filePurposeEnum = pgEnum('file_purpose', FILE_PURPOSES);
 export const documentStatusEnum = pgEnum('document_status', ['pending', 'approved', 'rejected']);
 
@@ -468,9 +470,11 @@ export const files = pgTable(
     // عمومی: عکس پروفایل و نمونه‌کار. خصوصی: مدرک و عکس چت (فقط با لینک امضاشده)
     isPublic: boolean('is_public').notNull().default(false),
     conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    // فایل پروژه و عکس گزارش روزانه — فقط دو طرف پروژه (فاز ۵)
+    projectId: uuid('project_id').references((): AnyPgColumn => projects.id, { onDelete: 'cascade' }),
     createdAt: createdAt(),
   },
-  (t) => [index('files_owner_idx').on(t.ownerUserId, t.purpose)],
+  (t) => [index('files_owner_idx').on(t.ownerUserId, t.purpose), index('files_project_idx').on(t.projectId)],
 );
 
 export const portfolioItems = pgTable(
@@ -563,4 +567,161 @@ export const adminActions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('admin_actions_created_idx').on(t.createdAt), index('admin_actions_target_idx').on(t.targetType, t.targetId)],
+);
+
+/* ================= فاز ۵: قرارداد، پرداخت، صورت‌وضعیت، گزارش روزانه ================= */
+
+export const contractStatusEnum = pgEnum('contract_status', ['draft', 'signing', 'active', 'void']);
+export const partySideEnum = pgEnum('party_side', ['client', 'provider']);
+export const paymentStatusEnum = pgEnum('payment_status', ['recorded', 'confirmed', 'disputed']);
+export const statementStatusEnum = pgEnum('statement_status', ['draft', 'sent', 'approved', 'rejected']);
+
+export type Milestone = { title: string; pct: number };
+/** متن کامل قرارداد؛ امضاها به هش همین شیء گره خورده‌اند */
+export type ContractTerms = {
+  number: string;
+  dateFa: string;
+  title: string;
+  client: { name: string; code: string; role: string; identityVerified: boolean };
+  provider: { name: string; code: string; role: string; identityVerified: boolean };
+  quantity: string | null;
+  priceText: string;
+  amount: number | null;
+  startText: string | null;
+  durationDays: number;
+  milestones: Milestone[];
+  retentionPct: number;
+  retentionMonths: number;
+  delayPenaltyPct: number;
+  extraClauses: string[];
+  clauses: { title: string; text: string }[];
+};
+
+export const contracts = pgTable('contracts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .unique()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  seq: bigserial('seq', { mode: 'number' }).notNull(),
+  number: varchar('number', { length: 30 }).notNull(), // BLK-1405-000123
+  version: smallint('version').notNull().default(1),
+  status: contractStatusEnum('status').notNull().default('draft'),
+  terms: jsonb('terms').$type<ContractTerms>().notNull(),
+  contentHash: varchar('content_hash', { length: 64 }).notNull(),
+  activatedAt: ts('activated_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const contractSignatures = pgTable(
+  'contract_signatures',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    contractId: uuid('contract_id')
+      .notNull()
+      .references(() => contracts.id, { onDelete: 'cascade' }),
+    version: smallint('version').notNull(),
+    side: partySideEnum('side').notNull(),
+    profileId: uuid('profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    phone: varchar('phone', { length: 11 }).notNull(),
+    contentHash: varchar('content_hash', { length: 64 }).notNull(),
+    ip: varchar('ip', { length: 64 }),
+    userAgent: varchar('user_agent', { length: 255 }),
+    signedAt: ts('signed_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('contract_sig_uq').on(t.contractId, t.version, t.side)],
+);
+
+// دفترچهٔ پرداخت — بلوک واسطهٔ مالی نیست؛ فقط ثبت و تأیید دوطرفه
+export const projectPayments = pgTable(
+  'project_payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    recordedByProfileId: uuid('recorded_by_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    amount: bigint('amount', { mode: 'number' }).notNull(), // تومان
+    label: varchar('label', { length: 40 }).notNull(), // پیش‌پرداخت، قسط مرحله، دستمزد هفتگی، تسویهٔ نهایی
+    milestoneIndex: smallint('milestone_index'),
+    statementId: uuid('statement_id').references((): AnyPgColumn => statements.id, { onDelete: 'set null' }),
+    paidOn: date('paid_on', { mode: 'string' }).notNull(),
+    note: text('note'),
+    status: paymentStatusEnum('status').notNull().default('recorded'),
+    disputeReason: text('dispute_reason'),
+    respondedAt: ts('responded_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('payments_project_idx').on(t.projectId, t.paidOn)],
+);
+
+export type StatementItem = {
+  key: string; // شناسهٔ ثابت ردیف بین صورت‌وضعیت‌ها
+  title: string;
+  unit: string;
+  qty: number; // مقدار کل طبق متره
+  unitPrice: number; // فی (تومان)
+  prevDone: number; // انجام‌شده تا صورت‌وضعیت تأییدشدهٔ قبلی
+  done: number; // انجام‌شده تا امروز (تجمعی)
+};
+export type StatementTotals = {
+  contractValue: number;
+  doneValue: number;
+  prevValue: number;
+  periodValue: number;
+  retention: number;
+  insurance: number;
+  payable: number;
+  progressPct: number;
+};
+
+export const statements = pgTable(
+  'statements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    number: smallint('number').notNull(),
+    status: statementStatusEnum('status').notNull().default('draft'),
+    items: jsonb('items').$type<StatementItem[]>().notNull(),
+    retentionPct: real('retention_pct').notNull().default(0),
+    insurancePct: real('insurance_pct').notNull().default(0),
+    totals: jsonb('totals').$type<StatementTotals>().notNull(),
+    note: text('note'),
+    rejectReason: text('reject_reason'),
+    createdByProfileId: uuid('created_by_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    sentAt: ts('sent_at'),
+    approvedAt: ts('approved_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('statements_project_number_uq').on(t.projectId, t.number)],
+);
+
+export const dailyReports = pgTable(
+  'daily_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    authorProfileId: uuid('author_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    reportDate: date('report_date', { mode: 'string' }).notNull(),
+    weather: varchar('weather', { length: 30 }),
+    crew: smallint('crew').notNull().default(0),
+    done: text('done').notNull(),
+    issues: text('issues'),
+    photoFileIds: uuid('photo_file_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('daily_project_author_date_uq').on(t.projectId, t.authorProfileId, t.reportDate),
+    index('daily_project_idx').on(t.projectId, t.reportDate),
+  ],
 );

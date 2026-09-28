@@ -8,7 +8,11 @@ import { EventEmitter } from 'events';
 const bus = new EventEmitter();
 bus.setMaxListeners(0);
 
-export type LiveEvent = { type: 'message' | 'conversation' | 'read' | 'project' | 'notification'; data: unknown };
+// فاز ۵: contract (امضا/ویرایش)، payment، statement، daily (گزارش روزانه)
+export type LiveEvent = {
+  type: 'message' | 'conversation' | 'read' | 'project' | 'notification' | 'contract' | 'payment' | 'statement' | 'daily';
+  data: unknown;
+};
 
 export function emitTo(userIds: string | string[], ev: LiveEvent) {
   for (const id of Array.isArray(userIds) ? userIds : [userIds]) bus.emit(`u:${id}`, ev);

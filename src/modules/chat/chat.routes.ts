@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ah, parse, uuidParam } from '../../lib/http';
-import { toLatinDigits } from '../../lib/text';
+import { ah, moneyInput, parse, uuidParam } from '../../lib/http';
 import { requireAuth, requireProfile } from '../../middlewares/auth';
 import { shapeMessage } from './chat.service';
 import * as svc from './chat.service';
@@ -91,10 +90,6 @@ r.post(
   }),
 );
 
-const money = z.preprocess(
-  (v) => (typeof v === 'string' ? Number(toLatinDigits(v).replace(/[^\d]/g, '')) || null : v),
-  z.number().int().min(0).nullable(),
-);
 
 /** پیشنهاد توافق (کار، مقدار، دستمزد، شروع، مدت، مراحل پرداخت) */
 r.post(
@@ -107,7 +102,7 @@ r.post(
         job: z.string().trim().min(2).max(160),
         qty: z.string().max(80).nullish(),
         price: z.string().trim().min(1).max(120),
-        amount: money.optional(),
+        amount: moneyInput.optional(),
         start: z.string().trim().min(2).max(80),
         durationDays: z.number().int().min(1).max(1000),
         plan: z

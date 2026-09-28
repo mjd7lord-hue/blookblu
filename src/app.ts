@@ -23,6 +23,10 @@ import fileRoutes from './modules/files/files.routes';
 import mediaRoutes from './modules/files/media.routes';
 import kycRoutes from './modules/kyc/kyc.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import { contractPrintRouter, projectContractRouter } from './modules/contracts/contract.routes';
+import { paymentsRouter, projectPaymentsRouter } from './modules/projects/payments';
+import { projectStatementsRouter, statementsRouter } from './modules/projects/statements';
+import { dailyRouter, projectDailyRouter, projectFilesRouter } from './modules/projects/worksite';
 
 export function createApp() {
   const app = express();
@@ -60,6 +64,16 @@ export function createApp() {
   app.use('/api/conversations', chatRoutes);
   app.use('/api/messages', messagesRouter);
   app.use('/api/projects', projectRoutes);
+  // فاز ۵: قرارداد، دفترچهٔ پرداخت، صورت‌وضعیت، گزارش روزانه و فایل‌های هر پروژه
+  app.use('/api/projects/:id/contract', projectContractRouter);
+  app.use('/api/projects/:id/payments', projectPaymentsRouter);
+  app.use('/api/projects/:id/statements', projectStatementsRouter);
+  app.use('/api/projects/:id/daily', projectDailyRouter);
+  app.use('/api/projects/:id/files', projectFilesRouter);
+  app.use('/api/contracts', contractPrintRouter);
+  app.use('/api/payments', paymentsRouter);
+  app.use('/api/statements', statementsRouter);
+  app.use('/api/daily', dailyRouter);
   app.use('/api/events', eventsRoutes);
   app.use('/api/guarantees', guaranteesRouter);
   app.use('/api/notifications', notificationRoutes);

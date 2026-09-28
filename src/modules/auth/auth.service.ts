@@ -8,23 +8,34 @@ import { sms } from '../../lib/sms';
 import { signAccess } from '../../lib/jwt';
 import { logger } from '../../lib/logger';
 
-const hashCode = (phone: string, code: string) => hmac(env.JWT_ACCESS_SECRET, `${phone}:${code}`);
+/**
+ * کاربرد کد: ورود، یا امضای یک قرارداد مشخص. ctx در هش می‌آید تا کد امضای یک قرارداد
+ * نه برای ورود کار کند نه برای قرارداد/نسخهٔ دیگر.
+ */
+export type CodePurpose = { kind: 'login' } | { kind: 'sign'; ctx: string };
+const LOGIN: CodePurpose = { kind: 'login' };
 
-export async function sendOtp(phone: string, ip?: string) {
+const hashCode = (phone: string, code: string, p: CodePurpose) =>
+  hmac(env.JWT_ACCESS_SECRET, p.kind === 'login' ? `${phone}:${code}` : `${phone}:${code}:${p.kind}:${p.ctx}`);
+
+export async function sendOtp(phone: string, ip?: string, purpose: CodePurpose = LOGIN) {
   const now = Date.now();
 
   // محدودیت: فاصلهٔ بین دو ارسال و سقف ساعتی برای هر شماره
   const recent = await db
-    .select({ createdAt: otpCodes.createdAt })
+    .select({ createdAt: otpCodes.createdAt, purpose: otpCodes.purpose })
     .from(otpCodes)
     .where(and(eq(otpCodes.phone, phone), gt(otpCodes.createdAt, new Date(now - 3600_000))))
     .orderBy(desc(otpCodes.createdAt));
 
-  if (recent[0]) {
-    const wait = Math.ceil((recent[0].createdAt.getTime() + env.OTP_RESEND_SECONDS * 1000 - now) / 1000);
+  // فاصلهٔ ارسال دوباره برای هر کاربرد جداست (ورود تازه مانع گرفتن کد امضا نشود)؛ سقف ساعتی مشترک است
+  const last = recent.find((x) => x.purpose === purpose.kind);
+  if (last) {
+    const wait = Math.ceil((last.createdAt.getTime() + env.OTP_RESEND_SECONDS * 1000 - now) / 1000);
     if (wait > 0) throw tooMany(`برای ارسال دوباره ${wait} ثانیه صبر کنید`, 'OTP_WAIT', { retryIn: wait });
   }
-  if (recent.length >= env.OTP_MAX_PER_HOUR) {
+  // امضا چند کد بیشتر لازم دارد (دو طرف × چند نسخه)
+  if (recent.length >= env.OTP_MAX_PER_HOUR * (purpose.kind === 'sign' ? 2 : 1)) {
     throw tooMany('تعداد درخواست کد زیاد بود؛ یک ساعت دیگر دوباره تلاش کنید', 'OTP_LIMIT');
   }
 
@@ -33,16 +44,17 @@ export async function sendOtp(phone: string, ip?: string) {
   await db
     .update(otpCodes)
     .set({ consumedAt: new Date() })
-    .where(and(eq(otpCodes.phone, phone), isNull(otpCodes.consumedAt)));
+    .where(and(eq(otpCodes.phone, phone), eq(otpCodes.purpose, purpose.kind), isNull(otpCodes.consumedAt)));
   await db.insert(otpCodes).values({
     phone,
-    codeHash: hashCode(phone, code),
+    purpose: purpose.kind,
+    codeHash: hashCode(phone, code, purpose),
     expiresAt: new Date(now + env.OTP_TTL_SECONDS * 1000),
     ip,
   });
 
   try {
-    await sms.sendOtp(phone, code);
+    await sms.sendOtp(phone, code, purpose.kind);
   } catch (e) {
     logger.error({ err: e }, 'SMS send failed');
     throw badRequest('ارسال پیامک ناموفق بود؛ چند دقیقهٔ دیگر تلاش کنید', 'SMS_FAILED');
@@ -59,11 +71,19 @@ export async function sendOtp(phone: string, ip?: string) {
   };
 }
 
-export async function verifyOtp(phone: string, code: string, userAgent?: string) {
+/** بررسی و مصرف کد؛ خطای فارسی برای کد اشتباه/منقضی */
+export async function consumeCode(phone: string, code: string, purpose: CodePurpose) {
   const [otp] = await db
     .select()
     .from(otpCodes)
-    .where(and(eq(otpCodes.phone, phone), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, new Date())))
+    .where(
+      and(
+        eq(otpCodes.phone, phone),
+        eq(otpCodes.purpose, purpose.kind),
+        isNull(otpCodes.consumedAt),
+        gt(otpCodes.expiresAt, new Date()),
+      ),
+    )
     .orderBy(desc(otpCodes.createdAt))
     .limit(1);
 
@@ -72,7 +92,7 @@ export async function verifyOtp(phone: string, code: string, userAgent?: string)
     throw tooMany('تعداد تلاش‌ها زیاد بود؛ کد تازه بگیرید', 'OTP_ATTEMPTS');
   }
 
-  if (!safeEqual(otp.codeHash, hashCode(phone, code))) {
+  if (!safeEqual(otp.codeHash, hashCode(phone, code, purpose))) {
     await db
       .update(otpCodes)
       .set({ attempts: sql`${otpCodes.attempts} + 1` })
@@ -83,7 +103,16 @@ export async function verifyOtp(phone: string, code: string, userAgent?: string)
     });
   }
 
-  await db.update(otpCodes).set({ consumedAt: new Date() }).where(eq(otpCodes.id, otp.id));
+  const used = await db
+    .update(otpCodes)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(otpCodes.id, otp.id), isNull(otpCodes.consumedAt)))
+    .returning({ id: otpCodes.id });
+  if (!used.length) throw badRequest('کد منقضی شده؛ دوباره درخواست کد بدهید', 'OTP_EXPIRED');
+}
+
+export async function verifyOtp(phone: string, code: string, userAgent?: string) {
+  await consumeCode(phone, code, LOGIN);
 
   let [user] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
   const isNew = !user;

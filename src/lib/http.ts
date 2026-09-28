@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { z, ZodTypeAny } from 'zod';
 import { badRequest } from './errors';
+import { toLatinDigits } from './text';
 
 /** خطاهای async را به error handler می‌فرستد */
 export const ah =
@@ -23,3 +24,9 @@ export const pageQuery = z.object({
 });
 
 export const uuidParam = z.object({ id: z.string().uuid() });
+
+/** مبلغ تومان: عدد، یا رشته با ارقام فارسی و جداکننده («۲۸٬۵۰۰٬۰۰۰») */
+export const moneyInput = z.preprocess(
+  (v) => (typeof v === 'string' ? Number(toLatinDigits(v).replace(/[^\d]/g, '')) || null : v),
+  z.number().int().min(0).max(1e15).nullable(),
+);

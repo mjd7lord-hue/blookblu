@@ -1,4 +1,4 @@
-# API بلوک — فاز ۱ تا ۴
+# API بلوک — فاز ۱ تا ۵
 
 همهٔ مسیرها با `/api` شروع می‌شوند. بدنه و پاسخ JSON است.
 مسیرهای 🔒 هدر `Authorization: Bearer <accessToken>` می‌خواهند. 👤 یعنی علاوه بر ورود، کاربر باید نقش فعال داشته باشد (کار با پروفایل همان نقش انجام می‌شود).
@@ -289,3 +289,78 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/admin/users/:id/unsuspend` | `{ note? }` | |
 | POST | `/admin/ads/:id/remove` | `{ reason }` | به صاحب آگهی اعلان می‌رود |
 | GET | `/admin/actions?targetId=` | — | ردپای کارهای ادمین |
+
+---
+
+# فاز ۵: قرارداد، دفترچهٔ پرداخت، صورت‌وضعیت، گزارش روزانه 🔒
+
+همه فقط برای **دو طرف پروژه** (کارفرما و مجری)؛ بقیه `404`. روی پروژهٔ لغوشده/تمام‌شده، ثبت تازه ← `PROJECT_CLOSED`.
+`mySide` / `side`: `client` (کارفرما) یا `provider` (مجری). هر پاسخ `can` دارد = دکمه‌های مجاز برای همین کاربر.
+
+## قرارداد دیجیتال
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/projects/:id/contract` | — | اولین بار از توافق چت پیش‌نویس می‌سازد (شمارهٔ `BLK-1405-000123`) |
+| PATCH | `/projects/:id/contract` | `{ milestones?, durationDays?, retentionPct?, retentionMonths?, delayPenaltyPct?, extraClauses? }` | هر طرف. **نسخهٔ تازه = امضاهای قبلی باطل** و به طرف مقابل اعلان می‌رود. قرارداد فعال ← `CONTRACT_LOCKED` |
+| POST | `/projects/:id/contract/sign-code` | — | کد ۵ رقمی به موبایل خود امضاکننده پیامک می‌شود. پاسخ: `{ contentHash, expiresIn, devCode? }` |
+| POST | `/projects/:id/contract/sign` | `{ code, contentHash }` | `contentHash` همان متنی که کاربر دیده؛ اگر عوض شده ← `CONTRACT_CHANGED` |
+| GET | `/contracts/:id/print?exp=&sig=` | — | صفحهٔ چاپی (HTML) — لینکش `printUrl` در پاسخ قرارداد است؛ در مرورگر «چاپ → ذخیره به PDF» |
+
+قرارداد: `{ id, number, version, status: draft|signing|active|void, statusName, contentHash, terms, signatures: { client, provider }, can: { edit, sign, remind }, printUrl }`.
+`terms.clauses` = متن ۷ ماده (+ «شرایط خاص» از `extraClauses`) آمادهٔ نمایش؛ `terms.milestones`، `retentionPct`، ... برای فرم ویرایش.
+کد امضا فقط برای همان قرارداد و همان نسخه معتبر است (کد ورود یا کد قرارداد دیگر قبول نیست). با دو امضا ← `active`، پیام سیستمی در چت و اعلان.
+لغو پروژه ← قرارداد امضانشده `void`. در `GET /projects/:id` فیلد `contract: { status, number } | null`.
+الگوی پیامک جدا برای امضا (اختیاری): `MELIPAYAMAK_SIGN_BODY_ID` یا `KAVENEGAR_SIGN_TEMPLATE`.
+
+## دفترچهٔ پرداخت
+
+بلوک پولی جابه‌جا نمی‌کند؛ هر طرف پرداخت را **ثبت** می‌کند و **طرف مقابل** تأیید یا اعتراض می‌کند.
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/projects/:id/payments` | — | `{ items, summary, labels }` |
+| POST | `/projects/:id/payments` | `{ amount, label, milestoneIndex?, statementId?, paidOn?, note? }` | `amount` عدد یا «۸٬۵۵۰٬۰۰۰». `label` یکی از `labels`. `paidOn` مثل `2026-09-28` (پیش‌فرض امروز) |
+| POST | `/payments/:id/confirm` | — | فقط طرف مقابلِ ثبت‌کننده (`OWN_PAYMENT`) |
+| POST | `/payments/:id/dispute` | `{ reason }` | |
+| DELETE | `/payments/:id` | — | فقط ثبت‌کننده و تا تأیید نشده |
+
+`summary = { total, confirmed, pending, disputed, remaining, retention, milestones: [{ index, title, pct, due, paid }] }`.
+
+## صورت‌وضعیت (متره × فی)
+
+مجری تنظیم و ارسال می‌کند، کارفرما تأیید یا رد. فقط یک صورت‌وضعیت باز در هر زمان (`STATEMENT_OPEN`).
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/projects/:id/statements` | — | فهرست + `nextBase` (ردیف‌های پیشنهادی بعدی) |
+| POST | `/projects/:id/statements` | `{ items?, retentionPct?, insurancePct?, note? }` | فقط مجری. بدون `items` = ردیف‌های آخرین صورت‌وضعیت تأییدشده |
+| GET / PATCH | `/statements/:id` | همان بدنه | ویرایش فقط در `draft`/`rejected` |
+| POST | `/statements/:id/send` | — | کار این دوره باید بیشتر از صفر باشد (`NOTHING_TO_BILL`) |
+| POST | `/statements/:id/approve` | `{ adjust?: [{ key, done }] }` | کارفرما؛ می‌تواند مقدار را **کم** کند (بین «قبلی» و ادعای مجری) |
+| POST | `/statements/:id/reject` | `{ reason }` | مجری اصلاح می‌کند و دوباره می‌فرستد |
+| DELETE | `/statements/:id` | — | پیش‌نویس/ردشده |
+
+ردیف: `{ key, title, unit, qty, unitPrice, prevDone, done }` — `done` تجمعی (تا امروز). `key` را در ویرایش برگردان؛ ردیف بی‌`key` = ردیف تازه.
+`prevDone` از آخرین صورت‌وضعیت تأییدشده می‌آید و کمتر از آن نمی‌شود (`ROW_BELOW_PREV`)؛ `done > qty` ← `DONE_OVER_QTY`.
+`totals = { contractValue, doneValue, prevValue, periodValue, retention, insurance, payable, progressPct }` — کسر حسن انجام کار (پیش‌فرض از قرارداد) و بیمه (`insurancePct`، پیش‌فرض ۰) از کار همین دوره.
+پرداخت صورت‌وضعیت: `POST /projects/:id/payments` با `statementId` (فقط تأییدشده).
+
+## گزارش روزانهٔ کارگاه
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/projects/:id/daily?before=&limit=` | — | تازه‌ترین اول + `stats: { days, crewDays }` |
+| POST | `/projects/:id/daily` | multipart: `done`, `crew?`, `weather?`, `issues?`, `date?` + تا ۴ عکس در `photos` — یا JSON | هر طرف، روزی یک گزارش (`DAILY_EXISTS` با `details.id` برای ویرایش) |
+| PATCH | `/daily/:id` | `{ weather?, crew?, done?, issues? }` | فقط نویسنده |
+| DELETE | `/daily/:id` | — | عکس‌ها هم پاک می‌شوند |
+
+## فایل‌های پروژه
+
+| متد | مسیر | توضیح |
+|---|---|---|
+| GET | `/projects/:id/files` | نقشه، صورت‌جلسه، ... (عکس‌های گزارش روزانه جدا) — حداکثر ۵۰ |
+| POST | `/projects/:id/files` | multipart: `file` (عکس یا PDF، ۱۰ مگابایت) |
+| DELETE | `/projects/:id/files/:fileId` | فقط کسی که گذاشته |
+
+رویدادهای لحظه‌ای تازه (SSE): `contract`، `payment`، `statement`، `daily`.
