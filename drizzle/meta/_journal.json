@@ -15,6 +15,13 @@
       "when": 1790582248060,
       "tag": "0001_chat_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790590403876,
+      "tag": "0002_files",
+      "breakpoints": true
     }
   ]
 }

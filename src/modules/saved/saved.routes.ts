@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { ads, profiles, savedItems } from '../../db/schema';
 import { ah, parse } from '../../lib/http';
 import { notFound } from '../../lib/errors';
+import { publicFileUrl } from '../files/files.service';
 import { requireAuth } from '../../middlewares/auth';
 
 const r = Router();
@@ -41,6 +42,7 @@ r.get(
               city: profiles.city,
               rating: profiles.ratingAvg,
               verified: profiles.verified,
+              avatarFileId: profiles.avatarFileId,
             })
             .from(profiles)
             .where(and(inArray(profiles.id, pIds), eq(profiles.isPublic, true)))
@@ -48,7 +50,10 @@ r.get(
     ]);
     res.json({
       ads: adIds.map((id) => adRows.find((a) => a.id === id)).filter((a) => a && a.status !== 'removed'),
-      profiles: pIds.map((id) => pRows.find((p) => p.id === id)).filter(Boolean),
+      profiles: pIds
+        .map((id) => pRows.find((p) => p.id === id))
+        .filter((p) => !!p)
+        .map(({ avatarFileId, ...p }) => ({ ...p, avatarUrl: publicFileUrl(avatarFileId) })),
     });
   }),
 );

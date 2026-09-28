@@ -6,6 +6,7 @@ import { normalizeFa } from '../../lib/text';
 import { blockedIds, trustOf } from '../profiles/profiles.service';
 import { notify } from '../notifications/notify';
 import { ensureConversation, postMessage } from '../chat/chat.service';
+import { publicFileUrl } from '../files/files.service';
 
 type User = typeof users.$inferSelect;
 type Profile = typeof profiles.$inferSelect;
@@ -103,6 +104,7 @@ const authorCols = {
   reviewsCount: profiles.ratingCount,
   doneCount: profiles.doneCount,
   week: profiles.week,
+  avatarFileId: profiles.avatarFileId,
 };
 
 function shapeAuthor(a: {
@@ -115,11 +117,13 @@ function shapeAuthor(a: {
   reviewsCount: number;
   doneCount: number;
   week: unknown;
+  avatarFileId: string | null;
   kyc: string;
 }) {
-  const { kyc, ...rest } = a;
+  const { kyc, avatarFileId, ...rest } = a;
   return {
     ...rest,
+    avatarUrl: publicFileUrl(avatarFileId),
     rating: Math.round(a.rating * 10) / 10,
     trust: trustOf({ ratingAvg: a.rating, ratingCount: a.reviewsCount, doneCount: a.doneCount }, kyc === 'verified').total,
   };

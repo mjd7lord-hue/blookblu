@@ -17,6 +17,8 @@ import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizeFa } from '../../lib/text';
 import { privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
 import { validateRoleData, type RoleData } from '../roles/validate';
+import { publicFileUrl, purgeFiles } from '../files/files.service';
+import { listPortfolio, profileFileIds, purgeUserFiles } from '../files/media.service';
 
 type User = typeof users.$inferSelect;
 type Profile = typeof profiles.$inferSelect;
@@ -222,7 +224,10 @@ export async function deleteRoleProfile(user: User, role: Role) {
   const all = await db.select({ role: profiles.role }).from(profiles).where(eq(profiles.userId, user.id));
   if (!all.some((x) => x.role === role)) throw notFound('این نقش ثبت نشده', 'ROLE_NOT_FOUND');
   if (all.length === 1) throw badRequest('حداقل یک نقش باید بماند؛ برای حذف کامل، حساب را حذف کنید', 'LAST_ROLE');
-  await db.delete(profiles).where(and(eq(profiles.userId, user.id), eq(profiles.role, role)));
+  const p = await getOwnProfile(user.id, role);
+  const fileIds = await profileFileIds(p.id);
+  await db.delete(profiles).where(eq(profiles.id, p.id));
+  await purgeFiles(fileIds);
   if (user.activeRole === role) {
     const next = all.find((x) => x.role !== role)!.role;
     await db.update(users).set({ activeRole: next }).where(eq(users.id, user.id));
@@ -276,6 +281,8 @@ export async function deleteAccount(user: User) {
       .set({ status: 'deleted', firstName: null, lastName: null, activeRole: null, prefs: {}, updatedAt: new Date() })
       .where(eq(users.id, user.id));
   });
+  // عکس‌ها، نمونه‌کارها، مدارک و پیوست‌های چت از ذخیره‌ساز پاک می‌شوند
+  await purgeUserFiles(user.id);
 }
 
 /* ---------- نمای عمومی و جست‌وجو ---------- */
@@ -309,7 +316,7 @@ export async function publicProfile(code: string, viewer?: User) {
   if (!own && (await blockedIds(viewer?.id)).includes(row.p.userId)) throw notFound('پروفایل پیدا نشد');
 
   const p = row.p;
-  const [skills, revs, guars, stars] = await Promise.all([
+  const [skills, revs, guars, stars, portfolio] = await Promise.all([
     db.select().from(profileSkills).where(eq(profileSkills.profileId, p.id)).orderBy(profileSkills.sort),
     db
       .select({
@@ -334,6 +341,7 @@ export async function publicProfile(code: string, viewer?: User) {
       .from(reviews)
       .where(eq(reviews.toProfileId, p.id))
       .groupBy(reviews.rating),
+    listPortfolio(p.id),
   ]);
 
   const kycVerified = row.kyc === 'verified';
@@ -343,6 +351,7 @@ export async function publicProfile(code: string, viewer?: User) {
     role: p.role,
     roleName: ROLE_INFO[p.role].name,
     name: p.displayName,
+    avatarUrl: publicFileUrl(p.avatarFileId),
     title: p.title,
     bio: p.bio,
     province: p.province,
@@ -362,6 +371,7 @@ export async function publicProfile(code: string, viewer?: User) {
     phone: p.showPhone && viewer ? row.phone : null,
     data: own ? p.data : publicData(p),
     skills: skills.map(({ profileId, ...s }) => s),
+    portfolio: portfolio.map(({ sort, ...x }) => x),
     reviews: revs,
     guarantors: guars,
     isOwn: own,
@@ -414,6 +424,7 @@ export async function searchProfiles(
       reviewsCount: profiles.ratingCount,
       doneCount: profiles.doneCount,
       week: profiles.week,
+      avatarFileId: profiles.avatarFileId,
       kyc: users.kycStatus,
     })
     .from(profiles)
@@ -428,8 +439,9 @@ export async function searchProfiles(
     .limit(q.limit)
     .offset((q.page - 1) * q.limit);
 
-  return rows.map(({ kyc, ...r }) => ({
+  return rows.map(({ kyc, avatarFileId, ...r }) => ({
     ...r,
+    avatarUrl: publicFileUrl(avatarFileId),
     trust: trustOf({ ratingAvg: r.rating, ratingCount: r.reviewsCount, doneCount: r.doneCount }, kyc === 'verified').total,
   }));
 }

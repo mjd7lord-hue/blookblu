@@ -17,6 +17,7 @@ import { emitTo } from '../../lib/events';
 import { isSuspicious } from '../../lib/flag';
 import { blockedIds } from '../profiles/profiles.service';
 import { notify } from '../notifications/notify';
+import { fileUrl, publicFileUrl, purgeFiles, saveUpload } from '../files/files.service';
 
 type Profile = typeof profiles.$inferSelect;
 type Conversation = typeof conversations.$inferSelect;
@@ -91,7 +92,7 @@ type NewMessage = {
 
 /** ثبت پیام + به‌روزرسانی شمارندهٔ خوانده‌نشده + ارسال رویداد لحظه‌ای */
 export async function postMessage(conv: Conversation, sender: Pick<Profile, 'id'> | null, m: NewMessage, exec: Exec = db) {
-  const flagged = m.kind === 'text' && !!m.body && isSuspicious(m.body);
+  const flagged = ['text', 'photo', 'file'].includes(m.kind) && !!m.body && isSuspicious(m.body);
   const [msg] = await exec
     .insert(messages)
     .values({
@@ -125,12 +126,19 @@ export async function postMessage(conv: Conversation, sender: Pick<Profile, 'id'
   return msg;
 }
 
+/** پیوست چت خصوصی است؛ لینک امضاشده فقط هنگام نمایش به اعضای گفت‌وگو ساخته می‌شود */
+function withFileUrl(m: Message) {
+  const fileId = m.payload?.fileId;
+  if ((m.kind !== 'photo' && m.kind !== 'file') || typeof fileId !== 'string') return m.payload;
+  return { ...m.payload, url: fileUrl({ id: fileId, isPublic: false }) };
+}
+
 export function shapeMessage(m: Message, viewerProfileId: string) {
   return {
     id: m.id,
     kind: m.kind,
     body: m.body,
-    payload: m.payload,
+    payload: withFileUrl(m),
     status: m.status,
     flagged: m.flagged && m.senderProfileId !== viewerProfileId,
     mine: m.senderProfileId === viewerProfileId,
@@ -159,6 +167,28 @@ export async function sendMessage(
     return postMessage(conv, me, { kind: 'phone', body: u.phone });
   }
   return postMessage(conv, me, { kind: input.kind, body: input.body ?? null, payload: input.payload ?? null });
+}
+
+/** عکس یا PDF در گفت‌وگو (با توضیح اختیاری) */
+export async function sendAttachment(
+  userId: string,
+  conversationId: string,
+  file: { buffer: Buffer; originalname?: string },
+  caption?: string,
+) {
+  const { conv, me, other } = await membership(userId, conversationId);
+  await assertNotBlocked(userId, other?.p.userId);
+  const f = await saveUpload(userId, 'chat', file, { conversationId });
+  try {
+    return await postMessage(conv, me, {
+      kind: f.mime === 'application/pdf' ? 'file' : 'photo',
+      body: caption || null,
+      payload: { fileId: f.id, mime: f.mime, size: f.size, name: f.originalName },
+    });
+  } catch (e) {
+    await purgeFiles([f.id]);
+    throw e;
+  }
 }
 
 export async function listMessages(userId: string, conversationId: string, q: { before?: string; limit: number }) {
@@ -207,6 +237,7 @@ export async function listMessages(userId: string, conversationId: string, q: { 
       name: other.p.displayName,
       title: other.p.title,
       verified: other.p.verified,
+      avatarUrl: publicFileUrl(other.p.avatarFileId),
     },
     project,
     items: rows.reverse().map((m) => shapeMessage(m, me.id)),
@@ -265,10 +296,10 @@ export async function listConversations(userId: string, q: { filter: 'all' | 'un
       stage: c.stage,
       projectId: c.projectId,
       asRole: me.role,
-      other: o ? { code: o.code, role: o.role, name: o.displayName, verified: o.verified } : null,
+      other: o ? { code: o.code, role: o.role, name: o.displayName, verified: o.verified, avatarUrl: publicFileUrl(o.avatarFileId) } : null,
       last: last
         ? {
-            text: last.kind === 'text' ? last.body : PREVIEW[last.kind] ?? '',
+            text: last.kind === 'text' ? last.body : (PREVIEW[last.kind] ?? '') + (last.body && (last.kind === 'photo' || last.kind === 'file') ? ` ${last.body}` : ''),
             mine: last.sender === me.id,
             at: last.createdAt,
           }
@@ -342,9 +373,10 @@ export async function deleteMessage(userId: string, messageId: string) {
   if (!m) throw notFound('پیام پیدا نشد');
   const { me } = await membership(userId, m.conversationId);
   if (m.senderProfileId !== me.id) throw forbidden('فقط پیام‌های خودت را می‌توانی حذف کنی', 'NOT_OWNER');
-  if (!['text', 'loc', 'phone'].includes(m.kind)) throw badRequest('پیشنهاد و پیام سیستمی حذف نمی‌شود؛ پیشنهاد را لغو کن', 'NOT_DELETABLE');
+  if (!['text', 'loc', 'phone', 'photo', 'file'].includes(m.kind)) throw badRequest('پیشنهاد و پیام سیستمی حذف نمی‌شود؛ پیشنهاد را لغو کن', 'NOT_DELETABLE');
   if (Date.now() - m.createdAt.getTime() > 24 * 3600_000) throw badRequest('فقط تا ۲۴ ساعت بعد از ارسال می‌شود حذف کرد', 'TOO_OLD');
   await db.update(messages).set({ kind: 'del', body: null, payload: null, flagged: false }).where(eq(messages.id, messageId));
+  if (typeof m.payload?.fileId === 'string') await purgeFiles([m.payload.fileId]);
   const members = await db
     .select({ userId: conversationMembers.userId })
     .from(conversationMembers)

@@ -5,6 +5,7 @@ import { toLatinDigits } from '../../lib/text';
 import { requireAuth, requireProfile } from '../../middlewares/auth';
 import { shapeMessage } from './chat.service';
 import * as svc from './chat.service';
+import { singleFile, uploadLimiter } from '../files/upload';
 
 const r = Router();
 
@@ -71,6 +72,21 @@ r.post(
     );
     const { me } = await svc.membership(req.user!.id, id);
     const msg = await svc.sendMessage(req.user!.id, id, body);
+    res.status(201).json({ message: shapeMessage(msg, me.id) });
+  }),
+);
+
+/** پیوست: عکس (JPG/PNG/WebP) یا PDF در فیلد «file»، توضیح اختیاری در «caption» — multipart/form-data */
+r.post(
+  '/:id/attachments',
+  requireAuth,
+  uploadLimiter,
+  singleFile,
+  ah(async (req, res) => {
+    const { id } = parse(uuidParam, req.params);
+    const { caption } = parse(z.object({ caption: z.string().trim().max(1000).optional() }), req.body);
+    const { me } = await svc.membership(req.user!.id, id);
+    const msg = await svc.sendAttachment(req.user!.id, id, req.file!, caption);
     res.status(201).json({ message: shapeMessage(msg, me.id) });
   }),
 );

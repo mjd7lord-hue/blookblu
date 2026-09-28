@@ -4,3 +4,5 @@ dist
 coverage
 *.log
 push-to-github.bat
+.pgdata
+uploads

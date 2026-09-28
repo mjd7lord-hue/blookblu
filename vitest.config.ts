@@ -1,3 +1,5 @@
+import os from 'os';
+import path from 'path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -15,6 +17,8 @@ export default defineConfig({
       OTP_RESEND_SECONDS: '0',
       OTP_MAX_PER_HOUR: '100',
       SMS_PROVIDER: 'console',
+      STORAGE_DRIVER: 'local',
+      STORAGE_LOCAL_DIR: path.join(os.tmpdir(), 'blook-test-uploads'),
     },
   },
 });

@@ -1,6 +1,10 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+// متغیرِ خالی در .env (مثل PUBLIC_BASE_URL=) یعنی تنظیم‌نشده
+const optUrl = z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional());
+const optStr = z.preprocess((v) => (v === '' ? undefined : v), z.string().optional());
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3000),
@@ -25,6 +29,18 @@ const schema = z.object({
   MELIPAYAMAK_PASSWORD: z.string().optional(),
   MELIPAYAMAK_BODY_ID: z.coerce.number().optional(),
   CORS_ORIGINS: z.string().default('*'),
+  // ذخیرهٔ فایل: local = پوشهٔ روی سرور (توسعه/تست)، s3 = Object Storage لیارا یا هر سرویس سازگار با S3
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_DIR: z.string().default('./uploads'),
+  S3_ENDPOINT: optUrl,
+  S3_REGION: z.string().default('default'),
+  S3_BUCKET: optStr,
+  S3_ACCESS_KEY: optStr,
+  S3_SECRET_KEY: optStr,
+  // اعتبار لینک امضاشدهٔ فایل‌های خصوصی (مدرک، عکس چت)
+  FILE_URL_TTL_SECONDS: z.coerce.number().int().min(60).default(3600),
+  // اگر تنظیم شود لینک فایل‌ها کامل برگردانده می‌شود (مثلاً https://api.blook.ir)؛ وگرنه نسبی (/api/files/...)
+  PUBLIC_BASE_URL: optUrl.transform((v) => v?.replace(/\/+$/, '')),
   // فقط در توسعه: کد OTP در پاسخ API برگردانده می‌شود تا تست راحت باشد
   OTP_DEV_ECHO: z
     .enum(['true', 'false'])
@@ -40,6 +56,11 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+if (env.STORAGE_DRIVER === 's3' && !(env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY && env.S3_SECRET_KEY)) {
+  console.error('❌ برای STORAGE_DRIVER=s3 باید S3_ENDPOINT، S3_BUCKET، S3_ACCESS_KEY و S3_SECRET_KEY تنظیم شوند');
+  process.exit(1);
+}
 
 if (env.NODE_ENV === 'production' && env.OTP_DEV_ECHO) {
   console.error('❌ OTP_DEV_ECHO در production نباید روشن باشد');

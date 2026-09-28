@@ -14,6 +14,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -129,6 +130,8 @@ export const profiles = pgTable(
     ratingCount: integer('rating_count').notNull().default(0),
     doneCount: integer('done_count').notNull().default(0),
     referredBy: uuid('referred_by'),
+    // عکس پروفایل (برای شرکت: لوگو) — فاز ۳
+    avatarFileId: uuid('avatar_file_id').references((): AnyPgColumn => files.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -435,4 +438,74 @@ export const projects = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('projects_client_idx').on(t.clientProfileId), index('projects_provider_idx').on(t.providerProfileId)],
+);
+
+/* ================= فاز ۳: فایل‌ها (عکس پروفایل، نمونه‌کار، مدارک، عکس چت) ================= */
+
+export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat'] as const;
+export const filePurposeEnum = pgEnum('file_purpose', FILE_PURPOSES);
+export const documentStatusEnum = pgEnum('document_status', ['pending', 'approved', 'rejected']);
+
+export const files = pgTable(
+  'files',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: filePurposeEnum('purpose').notNull(),
+    // مسیر در ذخیره‌ساز (تصادفی، بدون نام اصلی)
+    storageKey: varchar('storage_key', { length: 200 }).notNull().unique(),
+    mime: varchar('mime', { length: 60 }).notNull(),
+    size: integer('size').notNull(),
+    originalName: varchar('original_name', { length: 160 }),
+    // عمومی: عکس پروفایل و نمونه‌کار. خصوصی: مدرک و عکس چت (فقط با لینک امضاشده)
+    isPublic: boolean('is_public').notNull().default(false),
+    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('files_owner_idx').on(t.ownerUserId, t.purpose)],
+);
+
+export const portfolioItems = pgTable(
+  'portfolio_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    fileId: uuid('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 120 }).notNull(),
+    place: varchar('place', { length: 60 }),
+    whenText: varchar('when_text', { length: 40 }), // مثل «مهر ۱۴۰۵»
+    sort: smallint('sort').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index('portfolio_profile_idx').on(t.profileId, t.sort)],
+);
+
+// مدارک و گواهی‌ها — هرگز در پروفایل عمومی نمی‌آیند؛ فقط نتیجهٔ بررسی (نشان) دیده می‌شود
+export const documents = pgTable(
+  'documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // مدرک مخصوص یک نقش (مثل پروانهٔ نظام مهندسی)؛ null = مدرک هویتی مشترک همهٔ نقش‌ها
+    profileId: uuid('profile_id').references(() => profiles.id, { onDelete: 'cascade' }),
+    fileId: uuid('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 80 }).notNull(), // «کارت ملی»، «پروانهٔ اشتغال نظام مهندسی»، ...
+    group: varchar('group', { length: 30 }), // هویت، مهارت، پروانه، بیمه، ...
+    status: documentStatusEnum('status').notNull().default('pending'),
+    rejectReason: text('reject_reason'),
+    expiresAt: ts('expires_at'),
+    reviewedAt: ts('reviewed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('documents_user_idx').on(t.userId, t.createdAt), index('documents_status_idx').on(t.status)],
 );

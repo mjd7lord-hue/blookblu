@@ -1,4 +1,4 @@
-# API بلوک — فاز ۱ و ۲
+# API بلوک — فاز ۱ تا ۳
 
 همهٔ مسیرها با `/api` شروع می‌شوند. بدنه و پاسخ JSON است.
 مسیرهای 🔒 هدر `Authorization: Bearer <accessToken>` می‌خواهند. 👤 یعنی علاوه بر ورود، کاربر باید نقش فعال داشته باشد (کار با پروفایل همان نقش انجام می‌شود).
@@ -60,7 +60,7 @@
 | متد | مسیر | توضیح |
 |---|---|---|
 | GET | `/profiles?role=&q=&province=&city=&verified=true&available=true&page=&limit=` | جست‌وجوی افراد؛ احرازشده و در دسترس اول |
-| GET | `/profiles/:code` | شناسنامهٔ کاری: مهارت‌ها، اعتبار (`trust`)، ستاره‌ها، نظرها، قیم‌ها، روزهای هفته. شماره فقط با `showPhone` و برای کاربر واردشده |
+| GET | `/profiles/:code` | شناسنامهٔ کاری: `avatarUrl`، `portfolio`، مهارت‌ها، اعتبار (`trust`)، ستاره‌ها، نظرها، قیم‌ها، روزهای هفته. شماره فقط با `showPhone` و برای کاربر واردشده |
 
 `trust = { satisfaction(۵۵), projects(۲۵), reviews(۱۰), identity(۱۰), total(۱۰۰) }`
 
@@ -129,7 +129,7 @@
 
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
-| GET | `/conversations?filter=all\|unread\|archived\|project&q=` | — | فهرست؛ `other`، `last`، `unread`، `stage` (۰ پیشنهاد، ۱ توافق، ۲ در حال اجرا، ۳ تمام)، `unreadTotal` برای نشان منو |
+| GET | `/conversations?filter=all\|unread\|archived\|project&q=` | — | فهرست؛ `other` (با `avatarUrl`)، `last`، `unread`، `stage` (۰ پیشنهاد، ۱ توافق، ۲ در حال اجرا، ۳ تمام)، `unreadTotal` برای نشان منو |
 | POST | `/conversations` 👤 | `{ profileCode, adId? }` | شروع گفت‌وگو با نقش فعال من؛ اگر باشد همان را برمی‌گرداند |
 | GET | `/conversations/:id/messages?before=&limit=` | — | پیام‌ها (قدیمی→جدید) + `conversation`، `other`، `project`؛ همزمان «خوانده شد» ثبت می‌شود. `otherLastReadAt` برای تیک دوم |
 | POST | `/conversations/:id/messages` | `{kind:'text', body}` · `{kind:'loc', payload:{place,label,lat?,lng?}}` · `{kind:'phone'}` | شماره از حساب خود فرستنده برداشته می‌شود |
@@ -138,7 +138,8 @@
 | PATCH | `/conversations/:id` | `{ muted?, archived?, pinned? }` | |
 | DELETE | `/conversations/:id` | — | پنهان کردن برای من؛ پیام تازه دوباره نشانش می‌دهد |
 | POST | `/messages/:id/answer` | `{ status: accepted\|rejected }` | فقط گیرندهٔ پیشنهاد. پذیرش توافق ← پروژه ساخته می‌شود (`{ project }`) |
-| DELETE | `/messages/:id` | — | فقط پیام متنی/موقعیت/شمارهٔ خودم تا ۲۴ ساعت؛ به `kind:'del'` تبدیل می‌شود |
+| POST | `/conversations/:id/attachments` | multipart: `file` + `caption?` | عکس (← `kind:'photo'`) یا PDF (← `kind:'file'`)؛ فاز ۳ |
+| DELETE | `/messages/:id` | — | فقط پیام متنی/موقعیت/شماره/عکس/فایلِ خودم تا ۲۴ ساعت؛ به `kind:'del'` تبدیل می‌شود (فایلش هم پاک می‌شود) |
 
 ```json
 {
@@ -152,7 +153,8 @@
 جمع `plan` باید ۱۰۰ باشد (`PLAN_SUM`). اگر گفت‌وگو پروژهٔ فعال داشته باشد: `PROJECT_ACTIVE`.
 
 **قالب پیام:** `{ id, kind, body, payload, status, flagged, mine, system, projectId, createdAt }`
-`kind`: `text` `loc` `phone` `deal` `day` `sys` `del` (عکس/فایل/صوت در فاز ۳ با آپلود).
+`kind`: `text` `loc` `phone` `photo` `file` `deal` `day` `sys` `del` (پیام صوتی هنوز نه).
+در `photo`/`file`: `body` = توضیح، `payload = { fileId, mime, size, name, url }` — `url` لینک امضاشدهٔ موقت است.
 `flagged=true` یعنی پیام درخواست پیش‌پرداخت یا شمارهٔ کارت دارد → هشدار «مراقب باش» برای گیرنده.
 
 **پاسخ به آگهی** حالا خودکار گفت‌وگو می‌سازد: `POST /ads/:id/responses` → `response.conversationId`.
@@ -182,3 +184,67 @@ es.addEventListener('project', ...);       // پروژه ساخته/عوض شد
 es.addEventListener('conversation', ...);  // پیام حذف شد و ...
 ```
 با منقضی شدن توکن، اتصال را با توکن تازه دوباره باز کن.
+
+---
+
+# فاز ۳: فایل‌ها (عکس پروفایل، نمونه‌کار، مدارک، عکس چت)
+
+**آپلود** با `multipart/form-data`، یک فایل در فیلد `file` و فیلدهای متنی کنار آن:
+```js
+const fd = new FormData();
+fd.append('file', input.files[0]);
+fd.append('title', 'کاشی حمام واحد ۹۰ متری');
+await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+// Content-Type را دستی نگذار؛ مرورگر boundary را خودش می‌گذارد
+```
+
+| نوع | فرمت مجاز | حداکثر | دسترسی |
+|---|---|---|---|
+| عکس پروفایل، نمونه‌کار | JPG، PNG، WebP | ۵ مگابایت | عمومی |
+| مدرک، پیوست چت | JPG، PNG، WebP، PDF | ۱۰ مگابایت | خصوصی (لینک امضاشده) |
+
+نوع فایل از روی **محتوا** تشخیص داده می‌شود نه پسوند. از عکس‌های JPEG اطلاعات EXIF (از جمله مختصات GPS) حذف می‌شود.
+بهتر است اپ پیش از آپلود عکس را کوچک کند (مثلاً عرض ۱۶۰۰px، کیفیت ۰٫۸) — سرور تغییر اندازه نمی‌دهد.
+خطاها: `NO_FILE`، `FILE_TYPE`، `FILE_TOO_LARGE`، `UPLOAD_INVALID`، `UPLOAD_RATE` (بیش از ۶۰ آپلود در ۱۰ دقیقه).
+
+## دریافت فایل
+
+| متد | مسیر | توضیح |
+|---|---|---|
+| GET | `/files/:id` | عمومی: آزاد (کش یک‌ساله). خصوصی: با `?exp=&sig=` که API داده، یا با توکنِ صاحب فایل / عضو همان گفت‌وگو. در غیر این صورت `404` |
+
+همهٔ پاسخ‌ها فیلد `url`/`avatarUrl` آماده می‌دهند؛ مستقیم در `<img src>` بگذار (نسبی است مگر `PUBLIC_BASE_URL` تنظیم شده باشد → `${API}${url}`).
+لینک خصوصی حدود ۱ تا ۲ ساعت اعتبار دارد (`FILE_URL_TTL_SECONDS`)؛ بعد از آن فهرست را دوباره بگیر.
+
+## عکس پروفایل 🔒
+
+| متد | مسیر | توضیح |
+|---|---|---|
+| PUT | `/me/roles/:role/avatar` | multipart: `file` ← `{ avatarUrl }`. عکس قبلی پاک می‌شود. برای شرکت = لوگو |
+| DELETE | `/me/roles/:role/avatar` | |
+
+`avatarUrl` در `/me`، `/profiles`، `/profiles/:code`، نویسندهٔ آگهی و پاسخ‌ها، ذخیره‌ها، گفت‌وگوها و طرفین پروژه هست (`null` = حرف اول نام را نشان بده).
+
+## نمونه‌کار 🔒
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/me/roles/:role/portfolio` | — | `{ items, max: 12 }` |
+| POST | `/me/roles/:role/portfolio` | multipart: `file`, `title`, `place?`, `when?` | `when` متن آزاد مثل «مهر ۱۴۰۵». حداکثر ۱۲ (`PORTFOLIO_FULL`) |
+| PATCH | `/me/portfolio/:id` | `{ title?, place?, when?, sort? }` (JSON) | |
+| DELETE | `/me/portfolio/:id` | — | |
+
+آیتم: `{ id, title, place, when, url, createdAt }` — در پروفایل عمومی زیر `portfolio`.
+
+## مدارک و گواهی‌ها 🔒 (خصوصی)
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/me/documents` | — | مدارک من (همهٔ نقش‌ها) |
+| POST | `/me/documents` | multipart: `file`, `title`, `group?`, `role?` | `title` مثل «کارت ملی»، «پروانهٔ اشتغال نظام مهندسی». بدون `role` = مدرک هویتی مشترک. همان عنوانِ در حال بررسی دوباره ← `DOCUMENT_PENDING` |
+| DELETE | `/me/documents/:id` | — | مدرک تأییدشده حذف نمی‌شود (`DOCUMENT_APPROVED`) |
+
+مدرک: `{ id, title, group, role, status: pending|approved|rejected, rejectReason, expiresAt, reviewedAt, file: { url, mime, size, name }, createdAt }`.
+مدارک هرگز در پروفایل عمومی نمی‌آیند. بررسی و تأیید در پنل ادمین (فاز بعد) انجام می‌شود.
+
+حذف نقش یا حساب، همهٔ فایل‌های مربوط را هم از ذخیره‌ساز پاک می‌کند.

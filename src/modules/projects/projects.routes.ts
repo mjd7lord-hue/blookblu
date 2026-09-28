@@ -10,6 +10,7 @@ import { emitTo } from '../../lib/events';
 import { requireAuth } from '../../middlewares/auth';
 import { postMessage } from '../chat/chat.service';
 import { notify } from '../notifications/notify';
+import { publicFileUrl } from '../files/files.service';
 
 type Project = typeof projects.$inferSelect;
 const r = Router();
@@ -17,11 +18,19 @@ r.use(requireAuth);
 
 const clientP = alias(profiles, 'client_p');
 const providerP = alias(profiles, 'provider_p');
-const party = (p: typeof clientP | typeof providerP) => ({ id: p.id, code: p.code, name: p.displayName, role: p.role, userId: p.userId, verified: p.verified });
+const party = (p: typeof clientP | typeof providerP) => ({
+  id: p.id,
+  code: p.code,
+  name: p.displayName,
+  role: p.role,
+  userId: p.userId,
+  verified: p.verified,
+  avatarFileId: p.avatarFileId,
+});
 
 function shape(row: { p: Project; client: ReturnType<typeof pick>; provider: ReturnType<typeof pick> }, userId: string, reviewed: boolean) {
   const iAmClient = row.client.userId === userId;
-  const strip = ({ userId: _u, ...x }: ReturnType<typeof pick>) => x;
+  const strip = ({ userId: _u, avatarFileId, ...x }: ReturnType<typeof pick>) => ({ ...x, avatarUrl: publicFileUrl(avatarFileId) });
   return {
     ...row.p,
     stageName: row.p.status === 'cancelled' ? 'لغو شده' : STAGES[row.p.stage],
@@ -38,7 +47,7 @@ function shape(row: { p: Project; client: ReturnType<typeof pick>; provider: Ret
     },
   };
 }
-function pick(x: { id: string; code: string; name: string; role: string; userId: string; verified: boolean }) {
+function pick(x: { id: string; code: string; name: string; role: string; userId: string; verified: boolean; avatarFileId: string | null }) {
   return x;
 }
 

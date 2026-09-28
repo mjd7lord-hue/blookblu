@@ -19,6 +19,8 @@ import projectRoutes from './modules/projects/projects.routes';
 import notificationRoutes from './modules/notifications/notifications.routes';
 import safetyRoutes from './modules/safety/safety.routes';
 import metaRoutes from './modules/meta.routes';
+import fileRoutes from './modules/files/files.routes';
+import mediaRoutes from './modules/files/media.routes';
 
 export function createApp() {
   const app = express();
@@ -45,6 +47,8 @@ export function createApp() {
   app.use('/api/meta', metaRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/me', meRoutes);
+  app.use('/api/me', mediaRoutes);
+  app.use('/api/files', fileRoutes);
   app.use('/api/profiles', profileRoutes);
   app.use('/api/ads', adRoutes);
   app.use('/api/responses', responsesRouter);

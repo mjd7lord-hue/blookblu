@@ -20,20 +20,21 @@ Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · *
 ```bash
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
-npm test               # ۲۶ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
+npm test               # ۳۱ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
 npm run db:migrate     # اعمال migrationها روی DATABASE_URL
 npm run db:seed        # ۴ کاربر و آگهی نمونه (فقط توسعه)
 npm run build && npm start   # start اول migration می‌زند
 ```
 **دیتابیس تست:** `TEST_DATABASE_URL` (پیش‌فرض `postgresql://blook:blook@localhost:5432/blook_test`). تست‌ها schema را پاک می‌کنند — هرگز به دیتابیس اصلی/Supabase وصلش نکن.
-روی ویندوز: PostgreSQL را نصب کن یا `docker run -d -p 5432:5432 -e POSTGRES_USER=blook -e POSTGRES_PASSWORD=blook -e POSTGRES_DB=blook_test postgres:16`.
+روی ویندوز ساده‌ترین راه `npm run test:db` است (باینری از بستهٔ embedded-postgres، دادهٔ `.pgdata/`، دیتابیس UTF8). یا PostgreSQL را نصب کن یا `docker run -d -p 5432:5432 -e POSTGRES_USER=blook -e POSTGRES_PASSWORD=blook -e POSTGRES_DB=blook_test postgres:16`.
 
 ## ساختار
 ```
 src/config/env.ts          متغیرهای محیطی با zod (پیام خطای فارسی)
 src/db/schema.ts           همهٔ جدول‌ها (فاز ۱ بالا، فاز ۲ پایین فایل)
-src/lib/                   errors, http (ah/parse), text (شماره/فارسی), jwt, sms, events (SSE), flag (ضدکلاهبرداری)
+src/lib/                   errors, http (ah/parse), text (شماره/فارسی), jwt, sms, events (SSE), flag (ضدکلاهبرداری), storage (local/S3)
 src/middlewares/auth.ts    requireAuth · optionalAuth · requireProfile (req.profile = پروفایل نقش فعال)
 src/modules/
   auth/        OTP ۵ رقمی، refresh چرخشی با تشخیص سرقت
@@ -42,6 +43,7 @@ src/modules/
   ads/         آگهی، کاوش، پاسخ به آگهی (خودکار گفت‌وگو می‌سازد)
   chat/        گفت‌وگو، پیام، پیشنهاد توافق/روز شروع، SSE (/api/events)
   projects/    پروژه: توافق→در حال اجرا→تمام/لغو، امتیاز بعد از پایان
+  files/       آپلود (multer در حافظه، فیلد file)، تشخیص نوع از محتوا، حذف EXIF، لینک امضاشده؛ عکس پروفایل، نمونه‌کار، مدارک
   trust/ saved/ notifications/ safety/
 docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌روزش کن
 ```
@@ -56,12 +58,13 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
 - هر قابلیت تازه = تست یکپارچه در `tests/`. نکته: درخواست supertest تنبل است؛ بدون `await`/`.then` اجرا نمی‌شود.
 - فرمول امتیاز اعتبار (۵۵ رضایت + ۲۵ پروژه + ۱۰ تعداد نظر + ۱۰ احراز هویت) باید با فرانت یکی بماند.
 - رویداد لحظه‌ای درون‌حافظه است (`lib/events.ts`)؛ اگر لیارا چند نمونه شد → Redis.
+- فایل: همیشه با `saveUpload` از `modules/files/files.service` (نوع و حجم را همان‌جا چک می‌کند) و حذف با `purgeFiles` (ردیف + خود فایل). فایل خصوصی فقط با `fileUrl` (لینک امضاشده) به کسی داده شود که اجازه دارد. روی لیارا `STORAGE_DRIVER=s3` (دیسک اپ ماندگار نیست).
 
 ## وضعیت
 - ✅ فاز ۱: OTP، ثبت‌نام ۶ نقش، چندنقشی، پروفایل و مهارت/تعرفه، آگهی و کاوش، پاسخ‌ها، قیم، ذخیره، اعلان، گزارش/مسدودسازی
 - ✅ فاز ۲: گفت‌وگو، هشدار کلاهبرداری، پیشنهاد توافق و روز شروع، پروژه‌ها، امتیاز پس از پروژه، SSE
+- ✅ فاز ۳: آپلود فایل — عکس پروفایل، نمونه‌کار (۱۲ تا)، مدارک خصوصی (pending/approved/rejected)، عکس/PDF در چت؛ ذخیره local یا S3 (Object Storage لیارا)
 - ⏭ بعدی (به ترتیب پیشنهادی):
-  1. آپلود فایل (عکس چت، عکس پروفایل، نمونه‌کار، مدارک) — ذخیره‌سازی سازگار با ایران (مثلاً Object Storage لیارا، S3-compatible)
   2. احراز هویت (KYC) + پنل ادمین (بررسی مدارک، گزارش‌ها، نشان verified)
   3. قرارداد دیجیتال و امضا، مراحل پرداخت، صورت‌وضعیت، گزارش روزانهٔ کارگاه
   4. اتصال فرانت به API

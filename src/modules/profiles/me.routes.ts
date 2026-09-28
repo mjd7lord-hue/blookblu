@@ -7,6 +7,7 @@ import { ah, parse } from '../../lib/http';
 import { requireAuth } from '../../middlewares/auth';
 import { forbidden } from '../../lib/errors';
 import { trustOf } from './profiles.service';
+import { publicFileUrl } from '../files/files.service';
 import * as svc from './profiles.service';
 
 const r = Router();
@@ -32,7 +33,7 @@ r.get(
         prefs: u.prefs,
         createdAt: u.createdAt,
       },
-      profiles: ps.map((p) => ({ ...p, trust: trustOf(p, kyc) })),
+      profiles: ps.map((p) => ({ ...p, avatarUrl: publicFileUrl(p.avatarFileId), trust: trustOf(p, kyc) })),
       needsRegistration: ps.length === 0,
     });
   }),
