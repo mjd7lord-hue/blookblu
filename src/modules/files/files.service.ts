@@ -23,6 +23,8 @@ const RULES: Record<FilePurpose, { mimes: readonly string[]; maxBytes: number; i
   kyc: { mimes: IMAGE_MIMES, maxBytes: 8 * MB, isPublic: false },
   // فایل پروژه و عکس گزارش روزانه — فقط دو طرف پروژه
   project: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
+  // عکس‌های گزارش بازدید داوری — فقط دو طرف پروژه (با projectId) و با لینک امضاشده برای حل‌کننده
+  arbitration: { mimes: IMAGE_MIMES, maxBytes: 10 * MB, isPublic: false },
 };
 export const MAX_UPLOAD_BYTES = 10 * MB;
 
@@ -162,7 +164,7 @@ export async function canAccess(f: FileRow, user: { id: string; isAdmin: boolean
       .limit(1);
     return !!m;
   }
-  if (f.purpose === 'project' && f.projectId) {
+  if ((f.purpose === 'project' || f.purpose === 'arbitration') && f.projectId) {
     const [p] = await db
       .select({ id: projects.id })
       .from(projects)

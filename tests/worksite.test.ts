@@ -1,35 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { api, auth, registered } from './helpers';
+import { api, auth, makeProject, registered } from './helpers';
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9]);
 const PDF = Buffer.from('%PDF-1.4\n%%EOF', 'latin1');
-
-/** پیمانکار (کارفرما) و متخصص (مجری) با یک پروژهٔ ساخته‌شده از توافق چت */
-async function makeProject() {
-  const boss = await registered('contractor');
-  const w = await registered('specialist');
-  const c = await api().post('/api/conversations').set(auth(boss.token)).send({ profileCode: w.profile.code });
-  const cid = c.body.conversation.id;
-  const deal = await api()
-    .post(`/api/conversations/${cid}/deals`)
-    .set(auth(w.token))
-    .send({
-      job: 'آرماتوربندی سقف دوم',
-      qty: 'حدود ۳ تن',
-      price: '۹٬۵۰۰٬۰۰۰ تومان هر تن',
-      amount: '۲۸٬۵۰۰٬۰۰۰',
-      start: 'دوشنبه ۶ مهر، ۷ صبح',
-      durationDays: 3,
-      plan: [
-        { title: 'پیش‌پرداخت', pct: 30 },
-        { title: 'پایان کار', pct: 70 },
-      ],
-      retentionPct: 10,
-    });
-  const acc = await api().post(`/api/messages/${deal.body.message.id}/answer`).set(auth(boss.token)).send({ status: 'accepted' });
-  const pid = acc.body.project.id as string;
-  return { boss, w, cid, pid };
-}
 
 describe('phase 5: contract, payments, statements, daily reports', () => {
   it('contract: draft from deal, edit resets signatures, SMS-code signing, print', async () => {

@@ -48,3 +48,30 @@ export async function registered(role: keyof typeof FORMS) {
   if (r.status !== 201) throw new Error('register failed ' + JSON.stringify(r.body));
   return { ...u, profile: r.body.profile };
 }
+
+/** پیمانکار (کارفرما) و متخصص (مجری) با یک پروژهٔ ساخته‌شده از توافق چت */
+export async function makeProject() {
+  const boss = await registered('contractor');
+  const w = await registered('specialist');
+  const c = await api().post('/api/conversations').set(auth(boss.token)).send({ profileCode: w.profile.code });
+  const cid = c.body.conversation.id;
+  const deal = await api()
+    .post(`/api/conversations/${cid}/deals`)
+    .set(auth(w.token))
+    .send({
+      job: 'آرماتوربندی سقف دوم',
+      qty: 'حدود ۳ تن',
+      price: '۹٬۵۰۰٬۰۰۰ تومان هر تن',
+      amount: '۲۸٬۵۰۰٬۰۰۰',
+      start: 'دوشنبه ۶ مهر، ۷ صبح',
+      durationDays: 3,
+      plan: [
+        { title: 'پیش‌پرداخت', pct: 30 },
+        { title: 'پایان کار', pct: 70 },
+      ],
+      retentionPct: 10,
+    });
+  const acc = await api().post(`/api/messages/${deal.body.message.id}/answer`).set(auth(boss.token)).send({ status: 'accepted' });
+  const pid = acc.body.project.id as string;
+  return { boss, w, cid, pid };
+}

@@ -36,6 +36,13 @@
       "when": 1790594427728,
       "tag": "0004_contracts_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790597305040,
+      "tag": "0005_arbitration",
+      "breakpoints": true
     }
   ]
 }

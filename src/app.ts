@@ -27,6 +27,7 @@ import { contractPrintRouter, projectContractRouter } from './modules/contracts/
 import { paymentsRouter, projectPaymentsRouter } from './modules/projects/payments';
 import { projectStatementsRouter, statementsRouter } from './modules/projects/statements';
 import { dailyRouter, projectDailyRouter, projectFilesRouter } from './modules/projects/worksite';
+import { adminArbitrationRouter, arbiterRouter, disputesRouter, projectDisputesRouter } from './modules/arbitration/arbitration.routes';
 
 export function createApp() {
   const app = express();
@@ -79,6 +80,11 @@ export function createApp() {
   app.use('/api/payments', paymentsRouter);
   app.use('/api/statements', statementsRouter);
   app.use('/api/daily', dailyRouter);
+  // فاز ۷: حل اختلاف و داوری حضوری
+  app.use('/api/projects/:id/disputes', projectDisputesRouter);
+  app.use('/api/disputes', disputesRouter);
+  app.use('/api/arbitration', arbiterRouter);
+  app.use('/api/admin/arbitration', adminArbitrationRouter);
   app.use('/api/events', eventsRoutes);
   app.use('/api/guarantees', guaranteesRouter);
   app.use('/api/notifications', notificationRoutes);

@@ -23,7 +23,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Exec = typeof db | Tx;
 type Page = { page: number; limit: number };
 
-async function log(exec: Exec, admin: User, action: string, targetType: string, targetId: string, note?: string | null) {
+export async function adminLog(exec: Exec, admin: User, action: string, targetType: string, targetId: string, note?: string | null) {
   await exec.insert(adminActions).values({ adminUserId: admin.id, action, targetType, targetId, note: note ?? null });
 }
 
@@ -132,7 +132,7 @@ export async function approveKyc(admin: User, id: string, input: { firstName?: s
       .returning({ id: kycRequests.id });
     if (!upd.length) throw conflict('این درخواست قبلاً بررسی شده است', 'NOT_PENDING');
     await applyVerifiedName(tx, k.userId, firstName, lastName);
-    await log(tx, admin, 'kyc.approve', 'kyc', id, dups.length ? `تکراری: ${dups.map((d) => d.phone).join('، ')}` : null);
+    await adminLog(tx, admin, 'kyc.approve', 'kyc', id, dups.length ? `تکراری: ${dups.map((d) => d.phone).join('، ')}` : null);
   });
   // وعدهٔ حریم خصوصی: تصویر کارت بعد از بررسی از دسترس خارج می‌شود
   await purgeFiles([k.cardFileId, k.selfieFileId]);
@@ -157,7 +157,7 @@ export async function rejectKyc(admin: User, id: string, reason: string) {
       .update(users)
       .set({ kycStatus: 'rejected', updatedAt: new Date() })
       .where(and(eq(users.id, k.userId), eq(users.kycStatus, 'pending')));
-    await log(tx, admin, 'kyc.reject', 'kyc', id, reason);
+    await adminLog(tx, admin, 'kyc.reject', 'kyc', id, reason);
   });
   await purgeFiles([k.cardFileId, k.selfieFileId]);
   await notify(k.userId, { type: 'id', title: 'تأیید هویت انجام نشد', body: `${reason} — می‌توانی دوباره بفرستی.`, link: { screen: 'kyc' } });
@@ -218,7 +218,7 @@ export async function approveDocument(admin: User, id: string, input: { expiresA
       .update(documents)
       .set({ status: 'approved', rejectReason: null, expiresAt: input.expiresAt ?? null, reviewedBy: admin.id, reviewedAt: new Date() })
       .where(eq(documents.id, id));
-    await log(tx, admin, 'document.approve', 'document', id, input.expiresAt ? `انقضا: ${input.expiresAt.toISOString().slice(0, 10)}` : null);
+    await adminLog(tx, admin, 'document.approve', 'document', id, input.expiresAt ? `انقضا: ${input.expiresAt.toISOString().slice(0, 10)}` : null);
   });
   if (d.profileId) await recomputeVerified([d.profileId]);
   await notify(d.userId, { type: 'id', title: `«${d.title}» تأیید شد`, body: 'نشان مدرک‌دار روی شناسنامهٔ کاری‌ات به‌روز شد.', link: { screen: 'docs' } });
@@ -233,7 +233,7 @@ export async function rejectDocument(admin: User, id: string, reason: string) {
       .update(documents)
       .set({ status: 'rejected', rejectReason: reason, reviewedBy: admin.id, reviewedAt: new Date() })
       .where(eq(documents.id, id));
-    await log(tx, admin, d.status === 'approved' ? 'document.revoke' : 'document.reject', 'document', id, reason);
+    await adminLog(tx, admin, d.status === 'approved' ? 'document.revoke' : 'document.reject', 'document', id, reason);
   });
   if (d.profileId) await recomputeVerified([d.profileId]);
   await notify(d.userId, { type: 'id', title: `«${d.title}» تأیید نشد`, body: reason, link: { screen: 'docs' } });
@@ -293,7 +293,7 @@ export async function updateReport(admin: User, id: string, input: { status: 're
     .where(eq(reports.id, id))
     .returning();
   if (!rep) throw notFound('گزارش پیدا نشد');
-  await log(db, admin, `report.${input.status}`, 'report', id, input.note);
+  await adminLog(db, admin, `report.${input.status}`, 'report', id, input.note);
   if (input.status === 'resolved' || input.status === 'dismissed') {
     await notify(rep.reporterUserId, {
       type: 'id',
@@ -377,7 +377,7 @@ export async function suspendUser(admin: User, id: string, reason: string) {
     await tx.update(users).set({ status: 'suspended', updatedAt: new Date() }).where(eq(users.id, id));
     // همهٔ نشست‌ها بسته می‌شوند
     await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, id), sql`${refreshTokens.revokedAt} is null`));
-    await log(tx, admin, 'user.suspend', 'user', id, reason);
+    await adminLog(tx, admin, 'user.suspend', 'user', id, reason);
   });
 }
 
@@ -386,7 +386,7 @@ export async function unsuspendUser(admin: User, id: string, note?: string) {
   if (u.status !== 'suspended') throw conflict('این حساب مسدود نیست', 'NOT_SUSPENDED');
   await db.transaction(async (tx) => {
     await tx.update(users).set({ status: 'active', updatedAt: new Date() }).where(eq(users.id, id));
-    await log(tx, admin, 'user.unsuspend', 'user', id, note);
+    await adminLog(tx, admin, 'user.unsuspend', 'user', id, note);
   });
   await notify(id, { type: 'id', title: 'حساب شما دوباره فعال شد' });
 }
@@ -404,7 +404,7 @@ export async function removeAd(admin: User, id: string, reason: string) {
   if (row.ad.status === 'removed') throw conflict('این آگهی قبلاً حذف شده است', 'ALREADY_REMOVED');
   await db.transaction(async (tx) => {
     await tx.update(ads).set({ status: 'removed', updatedAt: new Date() }).where(eq(ads.id, id));
-    await log(tx, admin, 'ad.remove', 'ad', id, reason);
+    await adminLog(tx, admin, 'ad.remove', 'ad', id, reason);
   });
   await notify(row.userId, { type: 'id', title: `آگهی «${row.ad.title}» حذف شد`, body: reason });
 }

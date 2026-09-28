@@ -450,7 +450,7 @@ export const projects = pgTable(
 
 /* ================= فاز ۳: فایل‌ها (عکس پروفایل، نمونه‌کار، مدارک، عکس چت) ================= */
 
-export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat', 'kyc', 'project'] as const;
+export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat', 'kyc', 'project', 'arbitration'] as const;
 export const filePurposeEnum = pgEnum('file_purpose', FILE_PURPOSES);
 export const documentStatusEnum = pgEnum('document_status', ['pending', 'approved', 'rejected']);
 
@@ -724,4 +724,155 @@ export const dailyReports = pgTable(
     uniqueIndex('daily_project_author_date_uq').on(t.projectId, t.authorProfileId, t.reportDate),
     index('daily_project_idx').on(t.projectId, t.reportDate),
   ],
+);
+
+/* ================= فاز ۷: حل اختلاف و داوری حضوری ================= */
+
+// حل‌کنندهٔ حضوری (مهندس یا متخصص تأییدشده توسط ادمین)
+export const arbiterStatusEnum = pgEnum('arbiter_status', ['pending', 'approved', 'rejected', 'suspended']);
+export const arbiterRangeEnum = pgEnum('arbiter_range', ['city', 'province', 'neighbors']);
+export const disputeStatusEnum = pgEnum('dispute_status', ['open', 'arbitration', 'settled', 'decided', 'cancelled']);
+export const arbCaseStatusEnum = pgEnum('arb_case_status', [
+  'awaiting_payment', // ثبت شد؛ منتظر پرداخت امانی
+  'matching', // پرداخت شد؛ دنبال حل‌کننده
+  'offered', // به حل‌کننده پیشنهاد شد؛ منتظر قبول او
+  'assigned', // حل‌کننده قبول کرد؛ زمان بازدید تعیین شد
+  'reported', // گزارش و رأی ثبت شد؛ مهلت اعتراض
+  'appealed', // اعتراض شد؛ دور بازبینی
+  'final', // رأی نهایی
+  'refunded', // حل‌کننده نیامد / لغو؛ پول برگشت
+  'cancelled', // پیش از پرداخت لغو شد
+]);
+export const arbPaymentStatusEnum = pgEnum('arb_payment_status', ['unpaid', 'paid', 'released', 'refunded']);
+
+export const arbiters = pgTable(
+  'arbiters',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .unique()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    fields: text('fields').array().notNull(), // struct, mas, fin, iso, elec, mech, qty
+    range: arbiterRangeEnum('range').notNull().default('province'),
+    docFileId: uuid('doc_file_id').references(() => files.id, { onDelete: 'set null' }),
+    pledgedAt: ts('pledged_at').notNull(),
+    status: arbiterStatusEnum('status').notNull().default('pending'),
+    rejectReason: text('reject_reason'),
+    reviewedBy: uuid('reviewed_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+    reviewedAt: ts('reviewed_at'),
+    ratingAvg: real('rating_avg').notNull().default(0),
+    ratingCount: integer('rating_count').notNull().default(0),
+    impartialNo: integer('impartial_no').notNull().default(0), // تعداد «بی‌طرف نبود»
+    casesDone: integer('cases_done').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('arbiters_status_idx').on(t.status)],
+);
+
+export const disputes = pgTable(
+  'disputes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    openedByProfileId: uuid('opened_by_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    againstProfileId: uuid('against_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    reason: varchar('reason', { length: 40 }).notNull(), // تأخیر در پرداخت، کیفیت کار، ...
+    ask: varchar('ask', { length: 60 }).notNull(), // پرداخت باقی‌مانده، اصلاح کار، ...
+    description: text('description').notNull(),
+    city: varchar('city', { length: 60 }).notNull(), // محل بازدید
+    province: varchar('province', { length: 60 }).notNull(),
+    status: disputeStatusEnum('status').notNull().default('open'),
+    talkUntil: ts('talk_until').notNull(), // ۴۸ ساعت گفت‌وگو
+    settledAt: ts('settled_at'),
+    decidedAt: ts('decided_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('disputes_project_idx').on(t.projectId), index('disputes_status_idx').on(t.status)],
+);
+
+export type ArbReport = {
+  measure: string; // اندازه‌گیری و مشاهده
+  compare: string; // مطابق / مغایرت جزئی / مغایرت اساسی
+  verdict: string; // حق با کارفرما / حق با مجری / تقسیم مسئولیت
+  remedy: string; // کار اصلاحی یا مبلغ
+  upholds?: boolean; // فقط دور بازبینی: رأی قبلی تأیید شد؟
+};
+
+export const arbitrationCases = pgTable(
+  'arbitration_cases',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    disputeId: uuid('dispute_id')
+      .notNull()
+      .references(() => disputes.id, { onDelete: 'cascade' }),
+    round: smallint('round').notNull().default(1), // ۱ = داوری، ۲ = بازبینی
+    payerProfileId: uuid('payer_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    field: varchar('field', { length: 10 }).notNull(),
+    amountMillion: integer('amount_million').notNull(),
+    multi: boolean('multi').notNull().default(false),
+    fee: bigint('fee', { mode: 'number' }).notNull(),
+    travel: bigint('travel', { mode: 'number' }).notNull().default(0),
+    travelKind: varchar('travel_kind', { length: 8 }).notNull().default('city'),
+    commissionPct: smallint('commission_pct').notNull(),
+    commission: bigint('commission', { mode: 'number' }).notNull(),
+    arbiterShare: bigint('arbiter_share', { mode: 'number' }).notNull(), // سهم حل‌کننده + رفت‌وآمد
+    total: bigint('total', { mode: 'number' }).notNull(),
+    status: arbCaseStatusEnum('status').notNull().default('awaiting_payment'),
+    paymentStatus: arbPaymentStatusEnum('payment_status').notNull().default('unpaid'),
+    paymentRef: varchar('payment_ref', { length: 80 }),
+    paidAt: ts('paid_at'),
+    releasedAt: ts('released_at'),
+    refundedAt: ts('refunded_at'),
+    refundReason: text('refund_reason'),
+    arbiterId: uuid('arbiter_id').references(() => arbiters.id, { onDelete: 'set null' }),
+    skipArbiterIds: uuid('skip_arbiter_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    partyRejects: uuid('party_rejects').array().notNull().default(sql`'{}'::uuid[]`), // پروفایل طرف‌هایی که حق رد را استفاده کردند
+    offeredAt: ts('offered_at'),
+    acceptedAt: ts('accepted_at'),
+    visitText: varchar('visit_text', { length: 80 }),
+    report: jsonb('report').$type<ArbReport>(),
+    photoFileIds: uuid('photo_file_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    reportedAt: ts('reported_at'),
+    appealUntil: ts('appeal_until'),
+    appealReason: text('appeal_reason'),
+    partyAccepts: uuid('party_accepts').array().notNull().default(sql`'{}'::uuid[]`),
+    feeReturnDue: boolean('fee_return_due').notNull().default(false), // بازبینی رأی را عوض کرد ← هزینهٔ بازبینی به معترض برمی‌گردد
+    closedAt: ts('closed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // فقط یک پروندهٔ فعال در هر دور؛ پروندهٔ برگشت‌خورده/لغوشده جای درخواست تازه را باز می‌کند
+    uniqueIndex('arb_case_dispute_round_uq').on(t.disputeId, t.round).where(sql`status not in ('refunded', 'cancelled')`),
+    index('arb_case_arbiter_idx').on(t.arbiterId, t.status),
+    index('arb_case_status_idx').on(t.status),
+  ],
+);
+
+export const arbiterRatings = pgTable(
+  'arbiter_ratings',
+  {
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => arbitrationCases.id, { onDelete: 'cascade' }),
+    fromProfileId: uuid('from_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    rating: smallint('rating').notNull(),
+    impartial: boolean('impartial').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.caseId, t.fromProfileId] })],
 );

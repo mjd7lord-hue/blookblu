@@ -51,6 +51,8 @@ const schema = z.object({
   FILE_URL_TTL_SECONDS: z.coerce.number().int().min(60).default(3600),
   // اگر تنظیم شود لینک فایل‌ها کامل برگردانده می‌شود (مثلاً https://api.blook.ir)؛ وگرنه نسبی (/api/files/...)
   PUBLIC_BASE_URL: optUrl.transform((v) => v?.replace(/\/+$/, '')),
+  // راهنمای پرداخت امانی هزینهٔ داوری (تا درگاه بانکی وصل شود)، مثلاً شمارهٔ کارت/شبا و نام
+  ARB_PAYMENT_INFO: optStr,
   // فقط در توسعه: کد OTP در پاسخ API برگردانده می‌شود تا تست راحت باشد
   OTP_DEV_ECHO: z
     .enum(['true', 'false'])

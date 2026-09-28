@@ -1,4 +1,4 @@
-# API بلوک — فاز ۱ تا ۵
+# API بلوک — فاز ۱ تا ۷
 
 همهٔ مسیرها با `/api` شروع می‌شوند. بدنه و پاسخ JSON است.
 مسیرهای 🔒 هدر `Authorization: Bearer <accessToken>` می‌خواهند. 👤 یعنی علاوه بر ورود، کاربر باید نقش فعال داشته باشد (کار با پروفایل همان نقش انجام می‌شود).
@@ -363,4 +363,66 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/projects/:id/files` | multipart: `file` (عکس یا PDF، ۱۰ مگابایت) |
 | DELETE | `/projects/:id/files/:fileId` | فقط کسی که گذاشته |
 
-رویدادهای لحظه‌ای تازه (SSE): `contract`، `payment`، `statement`، `daily`.
+رویدادهای لحظه‌ای تازه (SSE): `contract`، `payment`، `statement`، `daily`، `notification` (هر اعلان تازه).
+
+---
+
+# فاز ۷: حل اختلاف و داوری حضوری
+
+مسیر (هم‌تراز با فرانت، دور ۲۵): ثبت اختلاف ← ۴۸ ساعت گفت‌وگو ← درخواست حل‌کننده و **پرداخت امانی** ← حل‌کنندهٔ بی‌طرف همان حوزه ←
+بازدید و گزارش (حداقل ۳ عکس) و رأی ← ۷۲ ساعت مهلت اعتراض (بازبینی با حل‌کنندهٔ دوم، نصف هزینه، رأی نهایی) ← آزاد شدن سهم حل‌کننده.
+مادهٔ ۷ قرارداد = موافقت‌نامهٔ داوری.
+
+**هزینه** (`GET /disputes/meta` همهٔ ضریب‌ها را می‌دهد): پایه ۱٬۲۰۰٬۰۰۰ × ضریب حوزه × ضریب مبلغ (گرد به ۱۰ هزار) + رفت‌وآمد
+(حل‌کننده در همان شهر: ۰، همان استان: ۶۰۰٬۰۰۰، استان دیگر: ۲٬۰۰۰٬۰۰۰). کمیسیون بلوک ۱۵٪، یا ۲۰٪ برای پروندهٔ پیچیده (مبلغ بالای ۲۰۰ میلیون، حوزهٔ سازه، یا چند موضوع). سهم حل‌کننده = بقیه + رفت‌وآمد.
+**پرداخت فعلاً دستی است:** بعد از درخواست، پاسخ `payment.instructions` دارد (از `ARB_PAYMENT_INFO` در `.env`)؛ ادمین پرداخت را تأیید می‌کند.
+
+**بی‌طرفی:** حل‌کننده باید با هیچ‌کدام از دو طرف گفت‌وگو یا پروژهٔ مشترک نداشته باشد؛ محدودهٔ بازدیدش (`city`/`province`/`neighbors`) باید شامل محل باشد.
+اول هم‌شهر، بعد هم‌استان، بعد کم‌کارتر و بهتر. حل‌کننده تا قبول نکرده به طرفین معرفی نمی‌شود.
+
+## طرفین اختلاف 🔒
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/disputes/meta` | — | موضوع‌ها، درخواست‌ها، مراحل، حوزه‌ها، فرمول هزینه (مهمان هم) |
+| POST | `/projects/:id/disputes` | `{ reason, ask, description, city? }` | هر طرف پروژه؛ یک پروندهٔ باز برای هر پروژه (`DISPUTE_OPEN`). محل پیش‌فرض: شهر ثبت‌کننده |
+| GET | `/disputes` | — | پرونده‌های من (ثبت‌کرده یا علیه من) |
+| GET | `/disputes/:id` | — | پرونده + `case` (دور فعلی) + `history` + `stage` (۰ تا ۴، هم‌تراز با DSTG2) + `can` |
+| POST | `/disputes/:id/settle` | — | «توافق کردیم»؛ فقط پیش از پرداخت (`ARB_IN_PROGRESS`) |
+| GET | `/disputes/:id/quote?field=&amountMillion=&multi=` | — | پیش‌نمایش هزینه + `available` (تعداد حل‌کنندهٔ بی‌طرف در دسترس) |
+| POST | `/disputes/:id/arbitration` | `{ field, amountMillion, multi?, agree: true }` | فقط ثبت‌کننده، بعد از ۴۸ ساعت (`TALK_WINDOW` با `hoursLeft`) ← `{ dispute, payment }` |
+| POST | `/disputes/:id/reject-arbiter` | — | هر طرف یک بار (`REJECT_USED`)؛ حل‌کنندهٔ دیگری تعیین می‌شود |
+| POST | `/disputes/:id/appeal` | `{ reason }` | فقط به رأی دور اول و در ۷۲ ساعت ← دور بازبینی با نصف هزینه ← `{ dispute, payment }` |
+| POST | `/disputes/:id/accept` | — | قبول رأی؛ با قبول **هر دو** طرف زودتر نهایی می‌شود، وگرنه بعد از مهلت اعتراض خودکار |
+| POST | `/disputes/:id/rate` | `{ rating(1-5), impartial }` | بعد از بسته شدن با رأی؛ یک بار |
+
+`case`: `{ id, round, status, field, fieldName, amountMillion, fee, travel, travelKind, commissionPct, commission, arbiterShare, total, paymentStatus, paidByMe, arbiter, visitText, report, photos, reportedAt, appealUntil, rejectUsed, accepted }`
+`status`: `awaiting_payment` → `matching` → `offered` → `assigned` → `reported` → (`appealed`) → `final` · یا `refunded`/`cancelled`.
+`report`: `{ measure, compare: مطابق|مغایرت جزئی|مغایرت اساسی, verdict: حق با کارفرما|حق با مجری|تقسیم مسئولیت, remedy, upholds? }`
+
+## حل‌کنندهٔ حضوری (مهندس/متخصص) 🔒
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/arbitration/me` | — | `{ arbiter, allowedFields, checklist, stats: { done, active, earned, pending } }` — چک‌لیست شرایط فقط راهنماست؛ تصمیم با ادمین |
+| POST | `/arbitration/apply` | multipart: `file` (پروانه/گواهی)، `fields` (`struct,qty` یا JSON)، `range`، `pledge=true` | با نقش فعال مهندس یا متخصص؛ فقط حوزه‌های همان نقش (`BAD_FIELDS`) |
+| GET | `/arbitration/jobs` | — | پرونده‌های پیشنهادشده/پذیرفته با `arbiterShare`، شرح اختلاف، محل |
+| POST | `/arbitration/jobs/:id/accept` | `{ visitAt, impartial: true }` | زمان بازدید به طرفین اعلام می‌شود |
+| POST | `/arbitration/jobs/:id/decline` | — | به حل‌کنندهٔ دیگری سپرده می‌شود |
+| POST | `/arbitration/jobs/:id/report` | multipart: ۳ تا ۸ عکس در `photos` + `measure`, `compare`, `verdict`, `remedy` (+ `upholds` در بازبینی) | رأی بازبینی نهایی است |
+
+حوزه‌ها: مهندس `struct` `elec` `mech` `qty` · متخصص `mas` `fin` `iso`.
+
+## ادمین 🛡 (`/admin/arbitration`)
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/admin/arbitration/stats` | — | `{ arbitersPending, casesAwaitingPayment, casesWithoutArbiter }` |
+| GET | `/admin/arbitration/arbiters?status=pending` | — | درخواست‌ها + `docUrl` |
+| POST | `/admin/arbitration/arbiters/:id/approve\|reject\|suspend` | `{ reason? }` | با تأیید، پرونده‌های منتظر دوباره تطبیق داده می‌شوند |
+| GET | `/admin/arbitration/cases?status=` | — | |
+| POST | `/admin/arbitration/cases/:id/confirm-payment` | `{ ref }` | پرداخت امانی تأیید ← پیشنهاد خودکار به حل‌کننده |
+| POST | `/admin/arbitration/cases/:id/assign` | `{ arbiterId }` | تعیین دستی (وقتی حل‌کنندهٔ خودکار پیدا نشد) |
+| POST | `/admin/arbitration/cases/:id/refund` | `{ reason }` | حل‌کننده نیامد / پیش از رأی: کل مبلغ برمی‌گردد و ثبت‌کننده می‌تواند دوباره درخواست بدهد |
+
+`feeReturnDue=true` در دور بازبینی یعنی رأی عوض شد و هزینهٔ بازبینی باید به معترض برگردد (فعلاً دستی).
