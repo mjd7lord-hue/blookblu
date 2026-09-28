@@ -163,7 +163,7 @@
 
 | متد | مسیر | توضیح |
 |---|---|---|
-| GET | `/projects?role=&status=active\|done\|cancelled` | پروژه‌های من؛ `myRole` (client/provider)، `other`، `stageName`، `can` (دکمه‌های مجاز) |
+| GET | `/projects?role=&status=active\|done\|cancelled` | پروژه‌های من؛ `myRole` (client/provider)، `other`، `stageName`، `myRating` (ستاره‌ای که من داده‌ام یا null)، `can` (دکمه‌های مجاز) |
 | GET | `/projects/:id` | جزئیات + مراحل پرداخت |
 | POST | `/projects/:id/start` | توافق ← در حال اجرا (هر دو طرف) |
 | POST | `/projects/:id/finish` | در حال اجرا ← تمام؛ **فقط کارفرما**. +۱ «پروژهٔ انجام‌شده» برای هر دو |

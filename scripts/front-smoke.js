@@ -27,7 +27,11 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 
 const FRONT = path.resolve(__dirname, '../../blookblu-front') + '/';
 let API = '';
-const html = fs.readFileSync(FRONT + 'index.html', 'utf8').replace('<script src="live.js"></script>', () => '<script>' + fs.readFileSync(FRONT + 'live.js', 'utf8') + '</script>');
+const inline = (f) => () => '<script>' + fs.readFileSync(FRONT + f, 'utf8') + '</script>';
+const html = fs
+  .readFileSync(FRONT + 'index.html', 'utf8')
+  .replace('<script src="live.js"></script>', inline('live.js'))
+  .replace('<script src="live-projects.js"></script>', inline('live-projects.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
 
@@ -49,7 +53,14 @@ function browser(name) {
         delete opt.signal;
         if (opt.body && opt.body.constructor && opt.body.constructor.name === 'FormData' && !(opt.body instanceof FormData)) {
           const fd = new FormData();
-          for (const [k, v] of opt.body.entries()) fd.append(k, typeof v === 'string' ? v : new Blob([Buffer.from(await v.arrayBuffer())], { type: v.type }), v.name);
+          for (const [k, v] of opt.body.entries()) {
+            if (typeof v === 'string') fd.append(k, v);
+            else {
+              // File در jsdom متد arrayBuffer ندارد؛ با FileReader خود jsdom خوانده می‌شود
+              const buf = await new Promise((res, rej) => { const r = new w.FileReader(); r.onload = () => res(Buffer.from(r.result)); r.onerror = rej; r.readAsArrayBuffer(v); });
+              fd.append(k, new Blob([buf], { type: v.type }), v.name);
+            }
+          }
           opt.body = fd;
         }
         return fetch(u, opt);
@@ -152,6 +163,120 @@ async function register(w, role, data) {
   ev(B, "openProfile('" + ev(A, 'LIVE.pub.code') + "')");
   await until(() => ev(B, 'S.cur') === 'profile', 'profile open');
   log('پروفایل پیمانکار از دید کارگر:', ev(B, `P['${ev(A, 'LIVE.pub.code')}'].name`), '· شهر', ev(B, `P['${ev(A, 'LIVE.pub.code')}'].place`));
+
+  /* ---------------- بخش ۲: پروژه (A کارفرما = پیمانکار، B مجری = کارگر) ---------------- */
+  const click = (w, sel) => ev(w, `document.querySelector(${JSON.stringify(sel)}).click()`);
+  for (const w of [A, B]) {
+    ev(w, "go('proj')");
+    await until(() => ev(w, 'S.projs[S.role] && S.projs[S.role].length && S.projs[S.role][0]._live'), 'projects list');
+  }
+  log('پروژه‌های من:', ev(A, 'S.projs[S.role][0].t'), '·', ev(A, 'PSTG[S.projs[S.role][0].stage]'));
+
+  // قرارداد: هر دو با کد پیامکی امضا می‌کنند
+  for (const w of [A, B]) {
+    ev(w, 'openContract(0)');
+    await until(() => ev(w, "S.cur==='ctr' && S.ctr[S.role+':0'] && S.ctr[S.role+':0']._c"), 'contract open');
+    ev(w, "ctrSign(S.role+':0')");
+    await until(() => /[۰-۹]{5}/.test(ev(w, "document.querySelector('#sb .sub').textContent")), 'sign code');
+    const code = ev(w, "document.querySelector('#sb .sub b').textContent");
+    ev(w, `document.getElementById('sigC').value='${code}'`);
+    click(w, '#sb .cta');
+    await until(() => ev(w, "S.ctr[S.role+':0'].me"), 'signed');
+  }
+  await until(() => ev(B, "S.ctr[S.role+':0']._c.status") === 'active', 'contract active');
+  log('قرارداد با امضای پیامکی هر دو طرف فعال شد:', ev(B, "S.ctr[S.role+':0']._c.number"));
+  const printed = await fetch(API + ev(B, "S.ctr[S.role+':0']._c.printUrl")).then((r) => r.text());
+  if (!printed.includes('امضاشده و فعال')) throw new Error('نسخهٔ چاپی قرارداد درست نیست');
+
+  // پرداخت: مجری ثبت می‌کند، کارفرما تأیید
+  ev(B, 'openProjPage(0)');
+  await until(() => ev(B, "S.cur==='pdet'"), 'project page B');
+  ev(B, "addPay(S.role+':0')");
+  ev(B, "document.getElementById('payA').value='۲٬۰۰۰٬۰۰۰'");
+  click(B, '#sb .cta');
+  await until(() => ev(B, "(S.pays[S.role+':0']||[]).length") === 1, 'payment recorded');
+  ev(A, 'openProjPage(0)');
+  await until(() => ev(A, "S.cur==='pdet' && document.querySelector('#s-pdet [data-act=confirm]')"), 'confirm button');
+  click(A, '#s-pdet [data-act=confirm]');
+  await until(() => ev(A, "S.pays[S.role+':0'][0]._x.status") === 'confirmed', 'payment confirmed');
+  log('دفترچهٔ پرداخت: ثبت مجری و تأیید کارفرما —', ev(A, "S.pays[S.role+':0'][0].f"));
+
+  // شروع کار
+  ev(B, 'advProj(0)');
+  await until(() => ev(B, 'S.projs[S.role][0].stage') === 2, 'work started');
+  log('شروع کار ← مرحله:', ev(B, 'PSTG[S.projs[S.role][0].stage]'));
+
+  // صورت‌وضعیت: مجری ردیف اضافه و ارسال می‌کند، کارفرما تأیید
+  ev(B, 'openSov(0)');
+  await until(() => ev(B, "S.cur==='sov' && document.getElementById('sovAdd')"), 'sov open');
+  click(B, '#sovAdd');
+  ev(B, "document.getElementById('srN').value='بلوک‌چینی دیوار طبقهٔ دوم';document.getElementById('srQ').value='۱۲۰';document.getElementById('srD').value='۶۰';document.getElementById('srP').value='۴۲۰٬۰۰۰'");
+  click(B, '#srGo');
+  ev(B, "sovSend(S.role+':0')");
+  await until(() => ev(B, "S.sov[S.role+':0'].st") === 'sent', 'sov sent');
+  ev(A, 'openSov(0)');
+  await until(() => ev(A, "document.getElementById('sovOk')"), 'approve button');
+  click(A, '#sovOk');
+  await until(() => ev(A, "S.sov[S.role+':0'].st") === 'ok', 'sov approved');
+  log('صورت‌وضعیت: ارسال مجری و تأیید کارفرما —', ev(A, "S.sov[S.role+':0']._s.totals.payable"), 'تومان قابل پرداخت');
+
+  // گزارش روزانه
+  ev(B, 'openProjPage(0)');
+  await until(() => ev(B, "S.cur==='pdet'"), 'project page again');
+  ev(B, "addDaily(S.role+':0')");
+  ev(B, "document.getElementById('dDone').value='بلوک‌چینی دیوار شمالی طبقهٔ دوم';document.getElementById('crewN').value='۵'");
+  click(B, '#sb .cta');
+  await until(() => ev(B, "(S.daily[S.role+':0']||[]).length") === 1, 'daily saved').catch((e) => { throw new Error(e.message + ' · ' + B.document.getElementById('toast').textContent); });
+  log('گزارش روزانه ثبت شد:', ev(B, "S.daily[S.role+':0'][0].done"));
+
+  // حل اختلاف ← درخواست داوری حضوری (مهلت گفت‌وگو را در دیتابیس تست تمام می‌کنیم)
+  ev(A, "go('disp')");
+  await until(() => ev(A, "S.cur==='disp'"), 'disp page');
+  ev(A, 'dispNew()');
+  await until(() => ev(A, "document.getElementById('dpD')"), 'dispute form');
+  ev(A, "document.getElementById('dpD').value='کیفیت ملات دیوار مطابق قرارداد نیست.'");
+  ev(A, 'dispSave()');
+  await until(() => ev(A, 'S.disp.length') === 1, 'dispute saved');
+  const { db } = require('../src/db');
+  const { disputes } = require('../src/db/schema');
+  const { eq } = require('drizzle-orm');
+  await db.update(disputes).set({ talkUntil: new Date(Date.now() - 1000) }).where(eq(disputes.id, ev(A, 'S.disp[0].id')));
+  await ev(A, 'LIVE.loadDisputes(true)');
+  ev(A, "arbAsk(S.disp[0].id);S.arbQ.field='mas';S.arbQ.ok=true;arbPay()");
+  await until(() => ev(A, "S.disp[0].arb && S.disp[0].arb._c.status") === 'awaiting_payment', 'arbitration requested');
+  log('داوری حضوری درخواست شد؛ منتظر پرداخت امانی:', ev(A, 'S.disp[0].arb._c.total'), 'تومان');
+
+  // مدارک و نمونه‌کار (فایل واقعی در مرورگر)
+  const mkFile = (w, name, type, bytes) => new w.File([new w.Uint8Array(bytes)], name, { type });
+  const PDFB = [...Buffer.from('%PDF-1.4\n%%EOF', 'latin1')];
+  const JPGB = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9];
+  ev(A, "go('docs')");
+  await until(() => ev(A, "S.cur==='docs' && S.docs[S.role] && S.docs[S.role].length"), 'docs page');
+  ev(A, 'docAdd()');
+  Object.defineProperty(A.document.querySelector('#sb input[type=file]'), 'files', { value: [mkFile(A, 'hse.pdf', 'application/pdf', PDFB)] });
+  click(A, '#sb .cta');
+  await until(() => ev(A, "S.docs[S.role].some(d=>d.st==='rev')"), 'document pending').catch((e) => { throw new Error(e.message + ' · ' + A.document.getElementById('toast').textContent + ' · ' + ev(A, 'S.cur') + ' · ' + ev(A, 'JSON.stringify(S.docs[S.role].map(d=>d.n+":"+d.st))')); });
+  log('مدرک بارگذاری شد و در صف بررسی است:', ev(A, "S.docs[S.role].find(d=>d.st==='rev').n"));
+
+  ev(A, "go('pf')");
+  ev(A, 'pfAdd()');
+  A.LIVE.pfFile = mkFile(A, 'work.jpg', 'image/jpeg', JPGB);
+  ev(A, "document.getElementById('pfT').value='سفت‌کاری ویلای درگهان'");
+  click(A, '#sb .cta');
+  await until(() => ev(A, 'S.pfItems.length') === 1 && ev(A, 'ME().pf.length') === 1, 'portfolio saved');
+  log('نمونه‌کار با عکس واقعی:', ev(A, 'S.pfItems[0].t'), '·', ev(A, 'ME().pf.length'), 'مورد در شناسنامه');
+
+  // مهندس: درخواست حل‌کنندهٔ حضوری
+  const C = browser('C');
+  await until(() => C.LIVE && C.LIVE.on, 'boot C');
+  await login(C, '17' + String(Date.now()).slice(-7));
+  await register(C, 'engineer', { fn: 'علی', ln: 'کریمی', nat: 'ایرانی', prov: 'فارس', city: 'شیراز', range: 'کل استان', field: 'عمران', grade: 'پایه ۱', nezam: '23-10-0456', nprov: 'فارس', comp: ['نظارت'], services: ['نظارت ساختمان'], days: [1, 4] });
+  ev(C, "go('arbj')");
+  await until(() => ev(C, "S.cur==='arbj' && S.arbQ2 && document.querySelector('#s-arbj .arbj-up')"), 'arbiter form');
+  C.LIVE.arbDoc = mkFile(C, 'nezam.pdf', 'application/pdf', PDFB);
+  ev(C, 'S.arbQ2.doc=true;S.arbQ2.pledge=true;arbJoin()');
+  await until(() => ev(C, 'S.arbMe && S.arbMe.st') === 'review', 'arbiter applied');
+  log('مهندس درخواست حل‌کنندگی داد؛ وضعیت: در حال بررسی · حوزه‌ها', ev(C, 'S.arbMe.fields.join(",")'));
 
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));

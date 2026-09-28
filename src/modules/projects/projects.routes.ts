@@ -16,8 +16,9 @@ import { voidPendingContract } from '../contracts/contract.service';
 const r = Router();
 r.use(requireAuth);
 
-function shape(row: { p: Project; client: Party; provider: Party }, userId: string, reviewed: boolean) {
+function shape(row: { p: Project; client: Party; provider: Party }, userId: string, myRating: number | undefined) {
   const iAmClient = row.client.userId === userId;
+  const reviewed = myRating !== undefined;
   const strip = ({ userId: _u, avatarFileId, ...x }: Party) => ({ ...x, avatarUrl: publicFileUrl(avatarFileId) });
   return {
     ...row.p,
@@ -26,6 +27,8 @@ function shape(row: { p: Project; client: Party; provider: Party }, userId: stri
     client: strip(row.client),
     provider: strip(row.provider),
     other: strip(iAmClient ? row.provider : row.client),
+    // ستاره‌ای که من به طرف مقابل داده‌ام (null = هنوز نداده‌ام)
+    myRating: myRating ?? null,
     // دکمه‌های مجاز برای کاربر فعلی
     can: {
       start: row.p.status === 'active' && row.p.stage === 1,
@@ -36,13 +39,13 @@ function shape(row: { p: Project; client: Party; provider: Party }, userId: stri
   };
 }
 async function myReviewed(userId: string, projectIds: string[]) {
-  if (!projectIds.length) return new Set<string>();
+  if (!projectIds.length) return new Map<string, number>();
   const mine = db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId));
   const rows = await db
-    .select({ projectId: reviews.projectId })
+    .select({ projectId: reviews.projectId, rating: reviews.rating })
     .from(reviews)
     .where(and(inArray(reviews.projectId, projectIds), inArray(reviews.fromProfileId, mine)));
-  return new Set(rows.map((x) => x.projectId!));
+  return new Map(rows.map((x) => [x.projectId!, x.rating]));
 }
 
 /** پروژه‌های من؛ با ?role= فقط پروژه‌های یک نقش */
@@ -70,7 +73,7 @@ r.get(
       .where(and(...conds))
       .orderBy(sql`case ${projects.status} when 'active' then 0 when 'done' then 1 else 2 end`, desc(projects.updatedAt));
     const reviewed = await myReviewed(req.user!.id, rows.map((x) => x.p.id));
-    res.json({ items: rows.map((x) => shape(x, req.user!.id, reviewed.has(x.p.id))) });
+    res.json({ items: rows.map((x) => shape(x, req.user!.id, reviewed.get(x.p.id))) });
   }),
 );
 
@@ -84,7 +87,7 @@ r.get(
       db.select({ status: contracts.status, number: contracts.number }).from(contracts).where(eq(contracts.projectId, id)).limit(1),
     ]);
     // contract: null = هنوز قرارداد تنظیم نشده
-    res.json({ project: { ...shape(row, req.user!.id, reviewed.has(id)), contract: ctr ?? null } });
+    res.json({ project: { ...shape(row, req.user!.id, reviewed.get(id)), contract: ctr ?? null } });
   }),
 );
 
@@ -115,7 +118,7 @@ r.post(
       .returning();
     if (!p) throw conflict('وضعیت پروژه عوض شده؛ دوباره باز کن', 'BAD_STAGE');
     await afterChange(row, p, req.user!.id, 'کار شروع شد؛ مرحله: در حال اجرا.', 'کار پروژه شروع شد');
-    res.json({ project: shape({ ...row, p }, req.user!.id, false) });
+    res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
   }),
 );
 
@@ -141,7 +144,7 @@ r.post(
       return np;
     });
     await afterChange(row, p, req.user!.id, 'کار تمام شد و کارفرما تأیید کرد. حالا می‌توانید به هم امتیاز بدهید.', 'پروژه تمام شد؛ امتیاز بده');
-    res.json({ project: shape({ ...row, p }, req.user!.id, false) });
+    res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
   }),
 );
 
@@ -160,7 +163,7 @@ r.post(
     if (!p) throw conflict('وضعیت پروژه عوض شده', 'BAD_STAGE');
     await voidPendingContract(id);
     await afterChange(row, p, req.user!.id, `پروژه لغو شد. دلیل: ${reason}`, 'پروژه لغو شد');
-    res.json({ project: shape({ ...row, p }, req.user!.id, false) });
+    res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
   }),
 );
 
