@@ -23,10 +23,11 @@ Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · *
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
 npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
-npm test               # ۳۲ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm test               # ۳۶ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
+npm run admin:grant -- 09xxxxxxxxx   # ادمین کردن کاربر (لغو: --revoke)
 npm run db:seed        # ۴ کاربر و آگهی نمونه (فقط توسعه)
 npm run build && npm start   # start اول migration می‌زند
 ```
@@ -38,7 +39,7 @@ npm run build && npm start   # start اول migration می‌زند
 src/config/env.ts          متغیرهای محیطی با zod (پیام خطای فارسی)
 src/db/schema.ts           همهٔ جدول‌ها (فاز ۱ بالا، فاز ۲ پایین فایل)
 src/lib/                   errors, http (ah/parse), text (شماره/فارسی), jwt, sms, events (SSE), flag (ضدکلاهبرداری), storage (supabase/local/s3)
-src/middlewares/auth.ts    requireAuth · optionalAuth · requireProfile (req.profile = پروفایل نقش فعال)
+src/middlewares/auth.ts    requireAuth · optionalAuth · requireProfile (req.profile = پروفایل نقش فعال) · requireAdmin
 src/modules/
   auth/        OTP ۵ رقمی، refresh چرخشی با تشخیص سرقت
   roles/       forms.ts = فرم ثبت‌نام هر نقش (هم‌تراز با REG در فرانت) · validate.ts
@@ -47,6 +48,8 @@ src/modules/
   chat/        گفت‌وگو، پیام، پیشنهاد توافق/روز شروع، SSE (/api/events)
   projects/    پروژه: توافق→در حال اجرا→تمام/لغو، امتیاز بعد از پایان
   files/       آپلود (multer در حافظه، فیلد file)، تشخیص نوع از محتوا، حذف EXIF، لینک امضاشده؛ عکس پروفایل، نمونه‌کار، مدارک
+  kyc/         تأیید هویت (/api/me/kyc): کارت + سلفی، کد ملی با رقم کنترل؛ عکس‌ها بعد از بررسی پاک
+  admin/       پنل ادمین (/api/admin): صف KYC و مدارک، گزارش‌ها، مسدودسازی، حذف آگهی، ردپا (admin_actions)، recomputeVerified
   trust/ saved/ notifications/ safety/
 docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌روزش کن
 ```
@@ -61,14 +64,15 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
 - هر قابلیت تازه = تست یکپارچه در `tests/`. نکته: درخواست supertest تنبل است؛ بدون `await`/`.then` اجرا نمی‌شود.
 - فرمول امتیاز اعتبار (۵۵ رضایت + ۲۵ پروژه + ۱۰ تعداد نظر + ۱۰ احراز هویت) باید با فرانت یکی بماند.
 - رویداد لحظه‌ای درون‌حافظه است (`lib/events.ts`)؛ اگر لیارا چند نمونه شد → Redis.
+- هر کار ادمین = یک ردیف در `admin_actions` (تابع `log` در admin.service). ادمین فقط با اسکریپت ساخته می‌شود، نه API.
 - فایل: همیشه با `saveUpload` از `modules/files/files.service` (نوع و حجم را همان‌جا چک می‌کند) و حذف با `purgeFiles` (ردیف + خود فایل). فایل خصوصی فقط با `fileUrl` (لینک امضاشده) به کسی داده شود که اجازه دارد. کلید `SUPABASE_SERVICE_ROLE_KEY` فقط در `.env` بک‌اند؛ هرگز در فرانت.
 
 ## وضعیت
 - ✅ فاز ۱: OTP، ثبت‌نام ۶ نقش، چندنقشی، پروفایل و مهارت/تعرفه، آگهی و کاوش، پاسخ‌ها، قیم، ذخیره، اعلان، گزارش/مسدودسازی
 - ✅ فاز ۲: گفت‌وگو، هشدار کلاهبرداری، پیشنهاد توافق و روز شروع، پروژه‌ها، امتیاز پس از پروژه، SSE
 - ✅ فاز ۳: آپلود فایل — عکس پروفایل، نمونه‌کار (۱۲ تا)، مدارک خصوصی (pending/approved/rejected)، عکس/PDF در چت؛ ذخیره در Supabase Storage (یا local در توسعه)
+- ✅ فاز ۴: KYC (نشان هویت + ۱۰ امتیاز، قفل نام، تشخیص کد ملی تکراری) و API پنل ادمین (مدارک و نشان مدرک‌دار با انقضا، گزارش‌ها، مسدودسازی، ردپا). رابط گرافیکی پنل هنوز ساخته نشده
 - ⏭ بعدی (به ترتیب پیشنهادی):
-  2. احراز هویت (KYC) + پنل ادمین (بررسی مدارک، گزارش‌ها، نشان verified)
   3. قرارداد دیجیتال و امضا، مراحل پرداخت، صورت‌وضعیت، گزارش روزانهٔ کارگاه
   4. اتصال فرانت به API
   5. تقویم/رزرو بازدید مهندس، Push (سرویس داخلی مثل نجوا/پوشه)

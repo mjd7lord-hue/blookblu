@@ -21,6 +21,8 @@ import safetyRoutes from './modules/safety/safety.routes';
 import metaRoutes from './modules/meta.routes';
 import fileRoutes from './modules/files/files.routes';
 import mediaRoutes from './modules/files/media.routes';
+import kycRoutes from './modules/kyc/kyc.routes';
+import adminRoutes from './modules/admin/admin.routes';
 
 export function createApp() {
   const app = express();
@@ -48,7 +50,9 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/me', meRoutes);
   app.use('/api/me', mediaRoutes);
+  app.use('/api/me', kycRoutes);
   app.use('/api/files', fileRoutes);
+  app.use('/api/admin', adminRoutes);
   app.use('/api/profiles', profileRoutes);
   app.use('/api/ads', adRoutes);
   app.use('/api/responses', responsesRouter);

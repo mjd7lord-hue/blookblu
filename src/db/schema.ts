@@ -55,6 +55,8 @@ export const users = pgTable('users', {
   activeRole: roleEnum('active_role'),
   kycStatus: kycStatusEnum('kyc_status').notNull().default('none'),
   status: userStatusEnum('status').notNull().default('active'),
+  // کارشناس/ادمین بلوک (فاز ۴) — با npm run admin:grant
+  isAdmin: boolean('is_admin').notNull().default(false),
   // ترجیحات اعلان و نمایش
   prefs: jsonb('prefs').$type<UserPrefs>().notNull().default(sql`'{}'::jsonb`),
   lastSeenAt: ts('last_seen_at'),
@@ -307,6 +309,10 @@ export const reports = pgTable('reports', {
   reason: varchar('reason', { length: 60 }).notNull(),
   details: text('details'),
   status: reportStatusEnum('status').notNull().default('open'),
+  // رسیدگی ادمین (فاز ۴)
+  adminNote: text('admin_note'),
+  handledBy: uuid('handled_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  handledAt: ts('handled_at'),
   createdAt: createdAt(),
 });
 
@@ -442,7 +448,7 @@ export const projects = pgTable(
 
 /* ================= فاز ۳: فایل‌ها (عکس پروفایل، نمونه‌کار، مدارک، عکس چت) ================= */
 
-export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat'] as const;
+export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat', 'kyc'] as const;
 export const filePurposeEnum = pgEnum('file_purpose', FILE_PURPOSES);
 export const documentStatusEnum = pgEnum('document_status', ['pending', 'approved', 'rejected']);
 
@@ -505,7 +511,56 @@ export const documents = pgTable(
     rejectReason: text('reject_reason'),
     expiresAt: ts('expires_at'),
     reviewedAt: ts('reviewed_at'),
+    reviewedBy: uuid('reviewed_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },
   (t) => [index('documents_user_idx').on(t.userId, t.createdAt), index('documents_status_idx').on(t.status)],
+);
+
+/* ================= فاز ۴: احراز هویت (KYC) و پنل ادمین ================= */
+
+export const kycIdTypeEnum = pgEnum('kyc_id_type', ['national', 'foreign']);
+
+// درخواست تأیید هویت — دادهٔ کاملاً خصوصی؛ فقط خود کاربر (وضعیت) و ادمین (جزئیات) می‌بینند
+export const kycRequests = pgTable(
+  'kyc_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    firstName: varchar('first_name', { length: 60 }).notNull(),
+    lastName: varchar('last_name', { length: 60 }).notNull(),
+    idType: kycIdTypeEnum('id_type').notNull().default('national'),
+    // کد ملی یا شمارهٔ مدرک اقامت اتباع (برای جلوگیری از چند حساب با یک هویت)
+    idNumber: varchar('id_number', { length: 30 }),
+    // عکس‌ها بعد از بررسی پاک می‌شوند (وعدهٔ حریم خصوصی اپ) → null
+    cardFileId: uuid('card_file_id').references(() => files.id, { onDelete: 'set null' }),
+    selfieFileId: uuid('selfie_file_id').references(() => files.id, { onDelete: 'set null' }),
+    status: documentStatusEnum('status').notNull().default('pending'),
+    rejectReason: text('reject_reason'),
+    reviewedBy: uuid('reviewed_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+    reviewedAt: ts('reviewed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('kyc_user_idx').on(t.userId, t.createdAt),
+    index('kyc_status_idx').on(t.status, t.createdAt),
+    index('kyc_id_number_idx').on(t.idNumber),
+  ],
+);
+
+// ردپای همهٔ کارهای ادمین
+export const adminActions = pgTable(
+  'admin_actions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    adminUserId: uuid('admin_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: varchar('action', { length: 40 }).notNull(), // kyc.approve, document.reject, user.suspend, ...
+    targetType: varchar('target_type', { length: 20 }).notNull(), // kyc, document, report, user, ad
+    targetId: uuid('target_id').notNull(),
+    note: text('note'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('admin_actions_created_idx').on(t.createdAt), index('admin_actions_target_idx').on(t.targetType, t.targetId)],
 );

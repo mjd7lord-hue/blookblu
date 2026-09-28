@@ -21,7 +21,7 @@ r.get(
     const ok =
       f.isPublic ||
       checkSignature(f.id, req.query.exp, req.query.sig) ||
-      (!!req.user && (await canAccess(f, req.user.id)));
+      (!!req.user && (await canAccess(f, req.user)));
     if (!ok) throw notFound('فایل پیدا نشد', 'FILE_NOT_FOUND');
     // فرانت روی دامنهٔ دیگری است؛ helmet به‌طور پیش‌فرض <img> بین‌دامنه‌ای را می‌بندد
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');

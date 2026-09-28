@@ -30,6 +30,7 @@ r.get(
         lastName: u.lastName,
         activeRole: u.activeRole,
         kycStatus: u.kycStatus,
+        isAdmin: u.isAdmin,
         prefs: u.prefs,
         createdAt: u.createdAt,
       },

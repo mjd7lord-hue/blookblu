@@ -1,4 +1,4 @@
-# API بلوک — فاز ۱ تا ۳
+# API بلوک — فاز ۱ تا ۴
 
 همهٔ مسیرها با `/api` شروع می‌شوند. بدنه و پاسخ JSON است.
 مسیرهای 🔒 هدر `Authorization: Bearer <accessToken>` می‌خواهند. 👤 یعنی علاوه بر ورود، کاربر باید نقش فعال داشته باشد (کار با پروفایل همان نقش انجام می‌شود).
@@ -248,3 +248,44 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 مدارک هرگز در پروفایل عمومی نمی‌آیند. بررسی و تأیید در پنل ادمین (فاز بعد) انجام می‌شود.
 
 حذف نقش یا حساب، همهٔ فایل‌های مربوط را هم از ذخیره‌ساز پاک می‌کند.
+
+---
+
+# فاز ۴: احراز هویت (KYC) و پنل ادمین
+
+## تأیید هویت 🔒
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/me/kyc` | — | `{ status: none\|pending\|verified\|rejected, request }` — `request.rejectReason` برای نمایش دلیل رد |
+| POST | `/me/kyc` | multipart: `card` (روی کارت ملی/کارت اقامت)، `selfie` (سلفی با کارت)، `idType?` (`national`\|`foreign`)، `idNumber?`، `firstName?`، `lastName?` | نام پیش‌فرض از حساب. کد ملی با رقم کنترل بررسی می‌شود |
+
+خطاها: `NO_FILE` (هر دو عکس لازم است)، `NATIONAL_CODE_INVALID`، `ID_NUMBER_INVALID`، `KYC_PENDING`، `KYC_DONE`، `KYC_NAME`.
+بعد از تأیید: `identityVerified=true`، ۱۰ امتیاز «احراز هویت» در `trust`، نام قفل می‌شود (`KYC_LOCKED`). **عکس‌های کارت بعد از بررسی (تأیید یا رد) پاک می‌شوند.**
+کد ملی هرگز به کاربران دیگر نشان داده نمی‌شود؛ خود کاربر فقط `idNumberMasked` می‌بیند.
+
+**نشان «مدرک‌دار» (`verified`)** = حداقل یک مدرکِ تأییدشده و منقضی‌نشده برای همان نقش. با انقضا خودکار (هر ساعت) برداشته می‌شود.
+
+## پنل ادمین 🛡 (`/admin/*`)
+
+فقط کاربر با `is_admin` (در `/me`: `user.isAdmin`). بقیه: `403 NOT_ADMIN`.
+ادمین کردن: کاربر یک بار با OTP وارد شود، بعد در سرور: `npm run admin:grant -- 09121234567` (لغو: `--revoke`).
+همهٔ کارها در `/admin/actions` ثبت می‌شوند. لینک عکس‌ها و مدارک امضاشده و موقت است.
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/admin/stats` | — | `{ pending: { kyc, documents, reports }, users: { total, suspended, verified, today } }` |
+| GET | `/admin/kyc?status=pending&page=` | — | صف (قدیمی‌ترین اول): نام، کد ملی، `cardUrl`، `selfieUrl`، `user`، `duplicates` (حساب تأییدشدهٔ دیگر با همین کد) |
+| POST | `/admin/kyc/:id/approve` | `{ firstName?, lastName?, force? }` | اصلاح نام مطابق کارت. کد ملی تکراری ← `KYC_DUPLICATE` مگر `force:true` |
+| POST | `/admin/kyc/:id/reject` | `{ reason }` | کاربر می‌تواند دوباره بفرستد |
+| GET | `/admin/documents?status=pending` | — | مدرک + `profile` + `user` + `file.url` |
+| POST | `/admin/documents/:id/approve` | `{ expiresAt? }` | تاریخ ISO، مثل `2027-03-20` |
+| POST | `/admin/documents/:id/reject` | `{ reason }` | رد یا **لغو تأیید** مدرک تأییدشده |
+| GET | `/admin/reports?status=active\|open\|reviewing\|resolved\|dismissed` | — | گزارش + گزارش‌دهنده + `target` (با `reportsCount`) + `ad` |
+| PATCH | `/admin/reports/:id` | `{ status: reviewing\|resolved\|dismissed, note? }` | با بستن، به گزارش‌دهنده اعلان می‌رود |
+| GET | `/admin/users?q=&status=&kyc=` | — | `q`: شماره (حتی چند رقم آخر)، کد `B-XXXX`، یا نام |
+| GET | `/admin/users/:id` | — | کاربر، سابقهٔ KYC، مدارک، گزارش‌های علیه او، کارهای ادمین روی او |
+| POST | `/admin/users/:id/suspend` | `{ reason }` | همهٔ نشست‌ها بسته؛ پروفایل و آگهی‌ها پنهان. ادمین/خود ← `TARGET_ADMIN`/`SELF` |
+| POST | `/admin/users/:id/unsuspend` | `{ note? }` | |
+| POST | `/admin/ads/:id/remove` | `{ reason }` | به صاحب آگهی اعلان می‌رود |
+| GET | `/admin/actions?targetId=` | — | ردپای کارهای ادمین |

@@ -3,6 +3,7 @@ import { db } from '../../db';
 import {
   ads,
   blocks,
+  kycRequests,
   guarantees,
   profiles,
   profileSkills,
@@ -275,10 +276,12 @@ export async function deleteAccount(user: User) {
         .set({ status: 'removed' })
         .where(inArray(ads.profileId, ps.map((x) => x.id)));
     await tx.delete(profiles).where(eq(profiles.userId, user.id));
+    // کد ملی و سابقهٔ احراز هویت هم پاک می‌شود
+    await tx.delete(kycRequests).where(eq(kycRequests.userId, user.id));
     await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, user.id));
     await tx
       .update(users)
-      .set({ status: 'deleted', firstName: null, lastName: null, activeRole: null, prefs: {}, updatedAt: new Date() })
+      .set({ status: 'deleted', firstName: null, lastName: null, activeRole: null, kycStatus: 'none', isAdmin: false, prefs: {}, updatedAt: new Date() })
       .where(eq(users.id, user.id));
   });
   // عکس‌ها، نمونه‌کارها، مدارک و پیوست‌های چت از ذخیره‌ساز پاک می‌شوند

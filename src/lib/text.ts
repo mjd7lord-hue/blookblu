@@ -30,3 +30,12 @@ export function maskPhone(p: string): string {
 export function normalizeFa(s: string): string {
   return s.replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim();
 }
+
+/** کد ملی ۱۰ رقمی ایران با رقم کنترل (ورودی با ارقام فارسی هم قبول است) */
+export function isValidNationalCode(input: string): boolean {
+  const s = toLatinDigits(input).replace(/[\s-]/g, '');
+  if (!/^\d{10}$/.test(s) || /^(\d)\1{9}$/.test(s)) return false;
+  const sum = [...s.slice(0, 9)].reduce((acc, d, i) => acc + Number(d) * (10 - i), 0) % 11;
+  const check = Number(s[9]);
+  return sum < 2 ? check === sum : check === 11 - sum;
+}

@@ -20,6 +20,8 @@ const RULES: Record<FilePurpose, { mimes: readonly string[]; maxBytes: number; i
   portfolio: { mimes: IMAGE_MIMES, maxBytes: 5 * MB, isPublic: true },
   document: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
   chat: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
+  // کارت ملی و سلفی — فقط برای بررسی ادمین، بعد از بررسی پاک می‌شوند
+  kyc: { mimes: IMAGE_MIMES, maxBytes: 8 * MB, isPublic: false },
 };
 export const MAX_UPLOAD_BYTES = 10 * MB;
 
@@ -155,9 +157,11 @@ export async function getFile(id: string) {
   return f;
 }
 
-/** دسترسی با توکن ورود (وقتی لینک امضاشده نیست): صاحب فایل یا عضو همان گفت‌وگو */
-export async function canAccess(f: FileRow, userId: string) {
+/** دسترسی با توکن ورود (وقتی لینک امضاشده نیست): صاحب فایل، عضو همان گفت‌وگو، یا ادمین (فقط مدرک و KYC) */
+export async function canAccess(f: FileRow, user: { id: string; isAdmin: boolean }) {
+  const userId = user.id;
   if (f.isPublic || f.ownerUserId === userId) return true;
+  if (user.isAdmin && (f.purpose === 'document' || f.purpose === 'kyc')) return true;
   if (f.purpose === 'chat' && f.conversationId) {
     const [m] = await db
       .select({ u: conversationMembers.userId })

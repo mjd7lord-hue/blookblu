@@ -69,3 +69,12 @@ export async function requireProfile(req: Request, res: Response, next: NextFunc
     }
   });
 }
+
+/** فقط کارشناس/ادمین بلوک */
+export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  await requireAuth(req, res, (err?: unknown) => {
+    if (err) return next(err);
+    if (!req.user!.isAdmin) return next(forbidden('این بخش فقط برای کارشناسان بلوک است', 'NOT_ADMIN'));
+    next();
+  });
+}
