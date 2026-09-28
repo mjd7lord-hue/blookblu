@@ -13,17 +13,20 @@
 
 ## پشته
 Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · **Drizzle ORM** (نه Prisma — باینری‌های Prisma در ایران/پروکسی مشکل داشت) · Zod 3 · JWT · Vitest + Supertest.
-میزبانی: لیارا (`liara.json`). پیامک: کاوه‌نگار یا ملی‌پیامک (`src/lib/sms.ts`).
-کد به Supabase وابسته نیست؛ فقط `DATABASE_URL` — اگر از ایران در دسترس نبود، به PostgreSQL لیارا عوض می‌شود.
+**فعلاً همه‌چیز روی Supabase است، نه لیارا** (به تصمیم مجید): دیتابیس + ذخیرهٔ فایل (Supabase Storage، باکت خصوصی `blook-files`). `liara.json` و درایور `s3` برای بعد نگه داشته شده‌اند. پیامک: کاوه‌نگار یا ملی‌پیامک (`src/lib/sms.ts`).
+کد به Supabase قفل نیست: دیتابیس فقط `DATABASE_URL`/`DIRECT_URL`، فایل از `lib/storage.ts` با `STORAGE_DRIVER` (auto|supabase|local|s3).
+- اپ با Transaction pooler (6543) و migration با `DIRECT_URL` (Session pooler، 5432).
+- `db:migrate` بعد از هر migration روی همهٔ جدول‌های public RLS را روشن و دسترسی `anon`/`authenticated` را می‌گیرد (وگرنه REST API خود Supabase با کلید عمومی همه‌چیز را لو می‌دهد). بک‌اند با نقش postgres (bypass RLS) کار می‌کند؛ policy لازم نیست.
 
 ## دستورها
 ```bash
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
 npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
-npm test               # ۳۱ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm test               # ۳۲ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
-npm run db:migrate     # اعمال migrationها روی DATABASE_URL
+npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
+npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
 npm run db:seed        # ۴ کاربر و آگهی نمونه (فقط توسعه)
 npm run build && npm start   # start اول migration می‌زند
 ```
@@ -34,7 +37,7 @@ npm run build && npm start   # start اول migration می‌زند
 ```
 src/config/env.ts          متغیرهای محیطی با zod (پیام خطای فارسی)
 src/db/schema.ts           همهٔ جدول‌ها (فاز ۱ بالا، فاز ۲ پایین فایل)
-src/lib/                   errors, http (ah/parse), text (شماره/فارسی), jwt, sms, events (SSE), flag (ضدکلاهبرداری), storage (local/S3)
+src/lib/                   errors, http (ah/parse), text (شماره/فارسی), jwt, sms, events (SSE), flag (ضدکلاهبرداری), storage (supabase/local/s3)
 src/middlewares/auth.ts    requireAuth · optionalAuth · requireProfile (req.profile = پروفایل نقش فعال)
 src/modules/
   auth/        OTP ۵ رقمی، refresh چرخشی با تشخیص سرقت
@@ -58,12 +61,12 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
 - هر قابلیت تازه = تست یکپارچه در `tests/`. نکته: درخواست supertest تنبل است؛ بدون `await`/`.then` اجرا نمی‌شود.
 - فرمول امتیاز اعتبار (۵۵ رضایت + ۲۵ پروژه + ۱۰ تعداد نظر + ۱۰ احراز هویت) باید با فرانت یکی بماند.
 - رویداد لحظه‌ای درون‌حافظه است (`lib/events.ts`)؛ اگر لیارا چند نمونه شد → Redis.
-- فایل: همیشه با `saveUpload` از `modules/files/files.service` (نوع و حجم را همان‌جا چک می‌کند) و حذف با `purgeFiles` (ردیف + خود فایل). فایل خصوصی فقط با `fileUrl` (لینک امضاشده) به کسی داده شود که اجازه دارد. روی لیارا `STORAGE_DRIVER=s3` (دیسک اپ ماندگار نیست).
+- فایل: همیشه با `saveUpload` از `modules/files/files.service` (نوع و حجم را همان‌جا چک می‌کند) و حذف با `purgeFiles` (ردیف + خود فایل). فایل خصوصی فقط با `fileUrl` (لینک امضاشده) به کسی داده شود که اجازه دارد. کلید `SUPABASE_SERVICE_ROLE_KEY` فقط در `.env` بک‌اند؛ هرگز در فرانت.
 
 ## وضعیت
 - ✅ فاز ۱: OTP، ثبت‌نام ۶ نقش، چندنقشی، پروفایل و مهارت/تعرفه، آگهی و کاوش، پاسخ‌ها، قیم، ذخیره، اعلان، گزارش/مسدودسازی
 - ✅ فاز ۲: گفت‌وگو، هشدار کلاهبرداری، پیشنهاد توافق و روز شروع، پروژه‌ها، امتیاز پس از پروژه، SSE
-- ✅ فاز ۳: آپلود فایل — عکس پروفایل، نمونه‌کار (۱۲ تا)، مدارک خصوصی (pending/approved/rejected)، عکس/PDF در چت؛ ذخیره local یا S3 (Object Storage لیارا)
+- ✅ فاز ۳: آپلود فایل — عکس پروفایل، نمونه‌کار (۱۲ تا)، مدارک خصوصی (pending/approved/rejected)، عکس/PDF در چت؛ ذخیره در Supabase Storage (یا local در توسعه)
 - ⏭ بعدی (به ترتیب پیشنهادی):
   2. احراز هویت (KYC) + پنل ادمین (بررسی مدارک، گزارش‌ها، نشان verified)
   3. قرارداد دیجیتال و امضا، مراحل پرداخت، صورت‌وضعیت، گزارش روزانهٔ کارگاه

@@ -7,10 +7,11 @@ import { env } from '../config/env';
 import { logger } from './logger';
 
 /**
- * لایهٔ ذخیره‌سازی فایل. دو حالت:
- * - local: پوشهٔ روی همین سرور (توسعه و تست). روی لیارا فقط با «دیسک» ماندگار است.
- * - s3: Object Storage لیارا (یا هر سرویس سازگار با S3 داخل ایران). باکت خصوصی می‌ماند؛
- *   دانلود با لینک امضاشدهٔ کوتاه‌مدت انجام می‌شود.
+ * لایهٔ ذخیره‌سازی فایل. سه حالت:
+ * - supabase: Supabase Storage با کلید service_role؛ باکت خصوصی خودکار ساخته می‌شود.
+ * - local: پوشهٔ روی همین سرور (توسعه و تست).
+ * - s3: هر سرویس سازگار با S3 (مثلاً Object Storage لیارا در آینده).
+ * در supabase و s3 باکت خصوصی می‌ماند و دانلود با لینک امضاشدهٔ کوتاه‌مدت انجام می‌شود.
  * کلید فایل‌ها تصادفی است و هرگز عوض نمی‌شود، پس کش طولانی بی‌خطر است.
  */
 export interface Storage {
@@ -94,7 +95,83 @@ class S3Storage implements Storage {
   }
 }
 
-export const storage: Storage = env.STORAGE_DRIVER === 's3' ? new S3Storage() : new LocalStorage();
+class SupabaseStorage implements Storage {
+  private base = `${env.SUPABASE_URL}/storage/v1`;
+  private bucket = env.SUPABASE_BUCKET;
+  private bucketReady: Promise<void> | null = null;
+
+  private headers(extra: Record<string, string> = {}) {
+    const key = env.SUPABASE_SERVICE_ROLE_KEY!;
+    // کلیدهای جدید (sb_secret_...) JWT نیستند و فقط در apikey فرستاده می‌شوند
+    return { apikey: key, ...(key.startsWith('sb_') ? {} : { Authorization: `Bearer ${key}` }), ...extra };
+  }
+
+  private async call(method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}) {
+    const res = await fetch(`${this.base}${path}`, { method, body, headers: this.headers(headers), signal: AbortSignal.timeout(60_000) });
+    const text = await res.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      /* پاسخ غیر JSON */
+    }
+    return { ok: res.ok, status: res.status, json, text };
+  }
+
+  private objectPath(key: string) {
+    return `${encodeURIComponent(this.bucket)}/${key.split('/').map(encodeURIComponent).join('/')}`;
+  }
+
+  /** باکت خصوصی را یک بار (اگر نیست) می‌سازد */
+  private ensureBucket() {
+    this.bucketReady ??= (async () => {
+      const r = await this.call(
+        'POST',
+        '/bucket',
+        JSON.stringify({ id: this.bucket, name: this.bucket, public: false, file_size_limit: 10 * 1024 * 1024 }),
+        { 'Content-Type': 'application/json' },
+      );
+      if (!r.ok && !/already exists|Duplicate/i.test(r.text)) {
+        this.bucketReady = null;
+        throw new Error(`supabase bucket create failed (${r.status}): ${r.text.slice(0, 200)}`);
+      }
+    })();
+    return this.bucketReady;
+  }
+
+  async put(key: string, body: Buffer, mime: string) {
+    await this.ensureBucket();
+    const r = await this.call('POST', `/object/${this.objectPath(key)}`, new Uint8Array(body), {
+      'Content-Type': mime,
+      'cache-control': 'max-age=31536000',
+      'x-upsert': 'false',
+    });
+    if (!r.ok) throw new Error(`supabase upload failed (${r.status}): ${r.text.slice(0, 200)}`);
+  }
+
+  async remove(key: string) {
+    const r = await this.call('DELETE', `/object/${this.objectPath(key)}`);
+    if (!r.ok && r.status !== 404 && r.status !== 400) throw new Error(`supabase delete failed (${r.status}): ${r.text.slice(0, 200)}`);
+  }
+
+  async send(res: Response, key: string, _mime: string, opts: { isPublic: boolean; downloadName?: string }) {
+    const r = await this.call('POST', `/object/sign/${this.objectPath(key)}`, JSON.stringify({ expiresIn: 600 }), {
+      'Content-Type': 'application/json',
+    });
+    const signed = (r.json.signedURL ?? r.json.signedUrl) as string | undefined;
+    if (!r.ok || !signed) {
+      res.status(404).json({ error: { code: 'FILE_MISSING', message: 'فایل پیدا نشد' } });
+      return;
+    }
+    let url = `${this.base}${signed.startsWith('/') ? '' : '/'}${signed}`;
+    if (opts.downloadName) url += `&download=${encodeURIComponent(opts.downloadName)}`;
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.redirect(302, url);
+  }
+}
+
+export const storage: Storage =
+  env.STORAGE_DRIVER === 'supabase' ? new SupabaseStorage() : env.STORAGE_DRIVER === 's3' ? new S3Storage() : new LocalStorage();
 
 /** حذف بی‌صدا (اگر فایل در ذخیره‌ساز نبود یا خطا داد، فقط لاگ) */
 export async function removeQuiet(keys: string[]) {

@@ -9,6 +9,8 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL لازم است'),
+  // اتصال مستقیم/Session pooler برای migration (Supabase: پورت 5432). اگر نبود، همان DATABASE_URL
+  DIRECT_URL: optStr,
   // Supabase و بیشتر سرویس‌های ابری اتصال SSL می‌خواهند
   DB_SSL: z
     .enum(['true', 'false'])
@@ -29,8 +31,13 @@ const schema = z.object({
   MELIPAYAMAK_PASSWORD: z.string().optional(),
   MELIPAYAMAK_BODY_ID: z.coerce.number().optional(),
   CORS_ORIGINS: z.string().default('*'),
-  // ذخیرهٔ فایل: local = پوشهٔ روی سرور (توسعه/تست)، s3 = Object Storage لیارا یا هر سرویس سازگار با S3
-  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  // ذخیرهٔ فایل: supabase = Supabase Storage، local = پوشهٔ روی سرور (توسعه/تست)، s3 = هر سرویس سازگار با S3
+  // auto (پیش‌فرض): اگر کلید Supabase تنظیم شده باشد supabase، وگرنه local
+  STORAGE_DRIVER: z.enum(['auto', 'supabase', 'local', 's3']).default('auto'),
+  // Supabase → Project Settings → API. اگر SUPABASE_URL نبود، از DATABASE_URL ساخته می‌شود
+  SUPABASE_URL: optUrl,
+  SUPABASE_SERVICE_ROLE_KEY: optStr,
+  SUPABASE_BUCKET: z.string().default('blook-files'),
   STORAGE_LOCAL_DIR: z.string().default('./uploads'),
   S3_ENDPOINT: optUrl,
   S3_REGION: z.string().default('default'),
@@ -55,7 +62,27 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+// آدرس پروژهٔ Supabase از نام کاربری pooler (postgres.<ref>) هم قابل حدس است
+function supabaseUrl(d: z.infer<typeof schema>): string | undefined {
+  if (d.SUPABASE_URL) return d.SUPABASE_URL.replace(/\/+$/, '');
+  const ref = d.DATABASE_URL.match(/\/\/postgres\.([a-z0-9]{20})[:@]/)?.[1];
+  return ref ? `https://${ref}.supabase.co` : undefined;
+}
+
+export const env = {
+  ...parsed.data,
+  SUPABASE_URL: supabaseUrl(parsed.data),
+  STORAGE_DRIVER: (parsed.data.STORAGE_DRIVER === 'auto'
+    ? parsed.data.SUPABASE_SERVICE_ROLE_KEY
+      ? 'supabase'
+      : 'local'
+    : parsed.data.STORAGE_DRIVER) as 'supabase' | 'local' | 's3',
+};
+
+if (env.STORAGE_DRIVER === 'supabase' && !(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY)) {
+  console.error('❌ برای STORAGE_DRIVER=supabase باید SUPABASE_SERVICE_ROLE_KEY (و اگر از DATABASE_URL پیدا نشد، SUPABASE_URL) تنظیم شود');
+  process.exit(1);
+}
 
 if (env.STORAGE_DRIVER === 's3' && !(env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY && env.S3_SECRET_KEY)) {
   console.error('❌ برای STORAGE_DRIVER=s3 باید S3_ENDPOINT، S3_BUCKET، S3_ACCESS_KEY و S3_SECRET_KEY تنظیم شوند');

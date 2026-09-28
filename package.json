@@ -14,6 +14,7 @@
     "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",
     "test:db": "tsx scripts/test-db.ts",
+    "storage:check": "tsx scripts/storage-check.ts",
     "start:server": "node dist/server.js"
   },
   "license": "UNLICENSED",
