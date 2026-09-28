@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../db';
 import { notifications, users } from '../../db/schema';
 import { logger } from '../../lib/logger';
+import { emitTo } from '../../lib/events';
 
 export type NotifType = 'req' | 'ad' | 'star' | 'id' | 'msg' | 'cal';
 
@@ -26,7 +27,9 @@ export async function notify(
       const [u] = await db.select({ prefs: users.prefs }).from(users).where(eq(users.id, userId)).limit(1);
       if (u?.prefs?.notif?.[pref] === false) return;
     }
-    await db.insert(notifications).values({ userId, type: n.type, title: n.title, body: n.body, link: n.link });
+    const [row] = await db.insert(notifications).values({ userId, type: n.type, title: n.title, body: n.body, link: n.link }).returning();
+    // اعلان لحظه‌ای در اپ (SSE)
+    emitTo(userId, { type: 'notification', data: row });
     // TODO(فاز بعد): ارسال Push از طریق سرویس داخلی (مثل Pushe یا Najva)
   } catch (e) {
     logger.error({ err: e }, 'notify failed');

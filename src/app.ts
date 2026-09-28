@@ -33,6 +33,11 @@ export function createApp() {
   app.set('trust proxy', 1); // پشت پروکسی لیارا
   app.disable('x-powered-by');
   app.use(helmet());
+  // فرانت روی گیت‌هاب (اینترنت) → API روی کامپیوتر خود کاربر: کروم این مجوز را در preflight می‌خواهد
+  app.use((req, res, next) => {
+    if (req.headers['access-control-request-private-network']) res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    next();
+  });
   app.use(
     cors({
       origin: env.CORS_ORIGINS === '*' ? true : env.CORS_ORIGINS.split(',').map((s) => s.trim()),
