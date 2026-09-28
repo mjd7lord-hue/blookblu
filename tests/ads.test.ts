@@ -65,6 +65,8 @@ describe('ads, explore, responses, reviews', () => {
     expect(inbox.body.items).toHaveLength(1);
     const out = await api().get('/api/responses').query({ dir: 'out' }).set(auth(worker.token));
     expect(out.body.items[0].ad.id).toBe(adId);
+    // گیرندهٔ درخواست (صاحب آگهی) هم می‌آید تا اپ نام و چت را نشان دهد
+    expect(out.body.items[0].to.code).toBe(boss.profile.code);
 
     const acc = await api().patch(`/api/responses/${resp.body.response.id}`).set(auth(boss.token)).send({ status: 'accepted' });
     expect(acc.body.response.status).toBe('accepted');

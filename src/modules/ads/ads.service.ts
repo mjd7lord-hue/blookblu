@@ -380,7 +380,7 @@ export async function withdrawResponse(userId: string, responseId: string) {
 /** درخواست‌های ورودی (به آگهی‌های من) و خروجی (پاسخ‌های من) برای صفحهٔ «درخواست‌ها» */
 export async function myRequests(profile: Profile, dir: 'in' | 'out') {
   if (dir === 'out') {
-    return db
+    const rows = await db
       .select({
         id: adResponses.id,
         status: adResponses.status,
@@ -388,11 +388,16 @@ export async function myRequests(profile: Profile, dir: 'in' | 'out') {
         offer: adResponses.offer,
         createdAt: adResponses.createdAt,
         ad: { id: ads.id, title: ads.title, type: ads.type, city: ads.city, status: ads.status },
+        // صاحب آگهی (گیرندهٔ درخواست)
+        to: { ...authorCols, kyc: users.kycStatus },
       })
       .from(adResponses)
       .innerJoin(ads, eq(ads.id, adResponses.adId))
+      .innerJoin(profiles, eq(profiles.id, ads.profileId))
+      .innerJoin(users, eq(users.id, profiles.userId))
       .where(and(eq(adResponses.profileId, profile.id), ne(adResponses.status, 'withdrawn')))
       .orderBy(desc(adResponses.createdAt));
+    return rows.map((r) => ({ ...r, to: shapeAuthor(r.to) }));
   }
   const myAdIds = db.select({ id: ads.id }).from(ads).where(eq(ads.profileId, profile.id));
   const rows = await db

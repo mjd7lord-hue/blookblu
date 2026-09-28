@@ -31,7 +31,8 @@ const inline = (f) => () => '<script>' + fs.readFileSync(FRONT + f, 'utf8') + '<
 const html = fs
   .readFileSync(FRONT + 'index.html', 'utf8')
   .replace('<script src="live.js"></script>', inline('live.js'))
-  .replace('<script src="live-projects.js"></script>', inline('live-projects.js'));
+  .replace('<script src="live-projects.js"></script>', inline('live-projects.js'))
+  .replace('<script src="live-more.js"></script>', inline('live-more.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
 
@@ -245,6 +246,36 @@ async function register(w, role, data) {
   ev(A, "arbAsk(S.disp[0].id);S.arbQ.field='mas';S.arbQ.ok=true;arbPay()");
   await until(() => ev(A, "S.disp[0].arb && S.disp[0].arb._c.status") === 'awaiting_payment', 'arbitration requested');
   log('داوری حضوری درخواست شد؛ منتظر پرداخت امانی:', ev(A, 'S.disp[0].arb._c.total'), 'تومان');
+
+  /* ---------------- بخش ۳: آگهی‌های من، پاسخ‌ها، درخواست‌ها، ذخیره‌ها، تقویم ---------------- */
+  ev(A, "go('myads')");
+  await until(() => ev(A, `ADS.some(a=>a.id==='${adId}'&&a.who==='me'&&a.st==='active')`), 'my ads');
+  ev(A, `adSt('${adId}','paused')`);
+  await until(() => ev(A, `ADS.find(a=>a.id==='${adId}').st`) === 'paused', 'ad paused');
+  ev(A, `adSt('${adId}','active')`);
+  await until(() => ev(A, `ADS.find(a=>a.id==='${adId}').st`) === 'active', 'ad active');
+  ev(A, `respList('${adId}')`);
+  await until(() => ev(A, "document.querySelectorAll('#sb .rs').length") === 1, 'responses list');
+  ev(A, `acceptResp('${adId}','${ev(B, 'LIVE.pub.code')}')`);
+  await until(async () => (await ev(A, "LIVE.api('GET','/responses?dir=in')")).items[0].status === 'accepted', 'response accepted');
+  log('آگهی‌های من: توقف و فعال‌سازی، پذیرش پاسخ کارگر');
+
+  ev(B, "S.rtab='out';go('req')");
+  await until(() => ev(B, "S.out.length && S.out[0].st==='ok' && S.out[0].to.startsWith('B-')"), 'outgoing requests');
+  log('مرکز درخواست‌های کارگر: درخواست ارسالی «پذیرفته شد» ·', ev(B, 'S.out[0].t'));
+
+  ev(B, `togSave('ad:${adId}')`);
+  await until(async () => (await ev(B, "LIVE.api('GET','/saved')")).ads.length === 1, 'saved on server');
+  B.LIVE.loaded.saved = 0;
+  ev(B, "S.svt='ads';go('saved')");
+  await until(() => ev(B, "document.querySelectorAll('#s-saved .acard').length") === 1, 'saved page');
+  log('ذخیره‌ها: آگهی روی سرور ذخیره و در صفحهٔ ذخیره‌ها نمایش داده شد');
+
+  ev(B, "go('cal')");
+  const wk0 = ev(B, 'LIVE.pub.week.join("")');
+  ev(B, 'calTog(S.cal.sel)');
+  await until(() => ev(B, 'LIVE.pub.week.join("")') !== wk0, 'week toggled');
+  log('تقویم:', ev(B, "document.querySelector('#s-cal .cal-h b').textContent"), '· روزهای آزاد هفته', wk0, '←', ev(B, 'LIVE.pub.week.join("")'));
 
   // مدارک و نمونه‌کار (فایل واقعی در مرورگر)
   const mkFile = (w, name, type, bytes) => new w.File([new w.Uint8Array(bytes)], name, { type });
