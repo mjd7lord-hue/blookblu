@@ -1,4 +1,4 @@
-# API بلوک — فاز ۱
+# API بلوک — فاز ۱ و ۲
 
 همهٔ مسیرها با `/api` شروع می‌شوند. بدنه و پاسخ JSON است.
 مسیرهای 🔒 هدر `Authorization: Bearer <accessToken>` می‌خواهند. 👤 یعنی علاوه بر ورود، کاربر باید نقش فعال داشته باشد (کار با پروفایل همان نقش انجام می‌شود).
@@ -102,11 +102,12 @@
 
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
-| POST | `/reviews` 🔒 | `{ responseId, rating(1-5), text? }` | فقط دو طرف یک همکاری پذیرفته‌شده، هر کدام یک بار |
 | GET | `/guarantees` 👤 | — | `mine`: قیم‌های من · `incoming`: کسانی که از من ضمانت خواسته‌اند |
 | POST | `/guarantees` 👤 | `{ name, relation, phone }` | درخواست قیم شدن (حداکثر ۵) |
 | PATCH | `/guarantees/:id` 🔒 | `{ status: accepted\|rejected }` | فقط صاحب همان شماره |
 | DELETE | `/guarantees/:id` 👤 | — | |
+
+امتیاز و نظر از فاز ۲ فقط روی **پروژهٔ تمام‌شده** ثبت می‌شود: `POST /projects/:id/review` (پایین‌تر).
 
 ## ذخیره‌ها، اعلان‌ها، ایمنی 🔒
 
@@ -119,3 +120,65 @@
 | POST | `/reports` | `{ profileCode? , adId?, reason, details? }` |
 | GET / POST | `/blocks` | فهرست / `{ profileCode }` |
 | DELETE | `/blocks/:code` | رفع مسدودی |
+
+---
+
+# فاز ۲: گفت‌وگو، توافق، پروژه
+
+## گفت‌وگو 🔒
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/conversations?filter=all\|unread\|archived\|project&q=` | — | فهرست؛ `other`، `last`، `unread`، `stage` (۰ پیشنهاد، ۱ توافق، ۲ در حال اجرا، ۳ تمام)، `unreadTotal` برای نشان منو |
+| POST | `/conversations` 👤 | `{ profileCode, adId? }` | شروع گفت‌وگو با نقش فعال من؛ اگر باشد همان را برمی‌گرداند |
+| GET | `/conversations/:id/messages?before=&limit=` | — | پیام‌ها (قدیمی→جدید) + `conversation`، `other`، `project`؛ همزمان «خوانده شد» ثبت می‌شود. `otherLastReadAt` برای تیک دوم |
+| POST | `/conversations/:id/messages` | `{kind:'text', body}` · `{kind:'loc', payload:{place,label,lat?,lng?}}` · `{kind:'phone'}` | شماره از حساب خود فرستنده برداشته می‌شود |
+| POST | `/conversations/:id/deals` | پایین | پیشنهاد توافق؛ پیشنهاد در انتظارِ قبلی لغو می‌شود |
+| POST | `/conversations/:id/days` | `{ date, hour }` | پیشنهاد روز شروع |
+| PATCH | `/conversations/:id` | `{ muted?, archived?, pinned? }` | |
+| DELETE | `/conversations/:id` | — | پنهان کردن برای من؛ پیام تازه دوباره نشانش می‌دهد |
+| POST | `/messages/:id/answer` | `{ status: accepted\|rejected }` | فقط گیرندهٔ پیشنهاد. پذیرش توافق ← پروژه ساخته می‌شود (`{ project }`) |
+| DELETE | `/messages/:id` | — | فقط پیام متنی/موقعیت/شمارهٔ خودم تا ۲۴ ساعت؛ به `kind:'del'` تبدیل می‌شود |
+
+```json
+{
+  "job": "آرماتوربندی سقف دوم", "qty": "حدود ۳ تن",
+  "price": "۹٬۵۰۰٬۰۰۰ تومان هر تن", "amount": "۲۸٬۵۰۰٬۰۰۰",
+  "start": "دوشنبه ۶ مهر، ۷ صبح", "durationDays": 3,
+  "plan": [{ "title": "پیش‌پرداخت", "pct": 30 }, { "title": "پایان کار", "pct": 70 }],
+  "retentionPct": 10
+}
+```
+جمع `plan` باید ۱۰۰ باشد (`PLAN_SUM`). اگر گفت‌وگو پروژهٔ فعال داشته باشد: `PROJECT_ACTIVE`.
+
+**قالب پیام:** `{ id, kind, body, payload, status, flagged, mine, system, projectId, createdAt }`
+`kind`: `text` `loc` `phone` `deal` `day` `sys` `del` (عکس/فایل/صوت در فاز ۳ با آپلود).
+`flagged=true` یعنی پیام درخواست پیش‌پرداخت یا شمارهٔ کارت دارد → هشدار «مراقب باش» برای گیرنده.
+
+**پاسخ به آگهی** حالا خودکار گفت‌وگو می‌سازد: `POST /ads/:id/responses` → `response.conversationId`.
+
+## پروژه‌ها 🔒
+
+| متد | مسیر | توضیح |
+|---|---|---|
+| GET | `/projects?role=&status=active\|done\|cancelled` | پروژه‌های من؛ `myRole` (client/provider)، `other`، `stageName`، `can` (دکمه‌های مجاز) |
+| GET | `/projects/:id` | جزئیات + مراحل پرداخت |
+| POST | `/projects/:id/start` | توافق ← در حال اجرا (هر دو طرف) |
+| POST | `/projects/:id/finish` | در حال اجرا ← تمام؛ **فقط کارفرما**. +۱ «پروژهٔ انجام‌شده» برای هر دو |
+| POST | `/projects/:id/cancel` | `{ reason }` |
+| POST | `/projects/:id/review` | `{ rating(1-5), text? }` — فقط پروژهٔ تمام‌شده، هر طرف یک بار |
+
+**کارفرما کیست؟** در آگهی «آمادهٔ همکاری» صاحب آگهی مجری است؛ در «نیاز به نیرو» و «پرسش» صاحب آگهی کارفرماست. در گفت‌وگوی مستقیم: کارفرما > شرکت > پیمانکار > مهندس > متخصص > کارگر.
+
+هر تغییر مرحله، پیام سیستمی در گفت‌وگو و اعلان برای طرف مقابل می‌سازد.
+
+## رویداد لحظه‌ای (SSE)
+
+```js
+const es = new EventSource(`${API}/api/events?token=${accessToken}`);
+es.addEventListener('message', (e) => { const { conversationId, message } = JSON.parse(e.data); });
+es.addEventListener('read', ...);          // طرف مقابل خواند → تیک دوم
+es.addEventListener('project', ...);       // پروژه ساخته/عوض شد
+es.addEventListener('conversation', ...);  // پیام حذف شد و ...
+```
+با منقضی شدن توکن، اتصال را با توکن تازه دوباره باز کن.

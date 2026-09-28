@@ -1,10 +1,11 @@
 import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
-import { adResponses, ads, profiles, users, type Role } from '../../db/schema';
+import { adResponses, ads, conversationMembers, conversations, profiles, users, type Role } from '../../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizeFa } from '../../lib/text';
 import { blockedIds, trustOf } from '../profiles/profiles.service';
 import { notify } from '../notifications/notify';
+import { ensureConversation, postMessage } from '../chat/chat.service';
 
 type User = typeof users.$inferSelect;
 type Profile = typeof profiles.$inferSelect;
@@ -279,14 +280,20 @@ export async function respond(profile: Profile, adId: string, input: { message: 
     return r;
   });
 
+  // هر پاسخ یک گفت‌وگو با صاحب آگهی باز می‌کند؛ پیام پاسخ اولین پیام آن است
+  const [owner] = await db.select().from(profiles).where(eq(profiles.id, row.ad.profileId)).limit(1);
+  const { conv, created } = await ensureConversation(profile, owner, { adId, title: row.ad.title });
+  if (created) await postMessage(conv, null, { kind: 'sys', body: `این گفت‌وگو از آگهی «${row.ad.title}» شروع شد.` });
+  await postMessage(conv, profile, { kind: 'text', body: values.offer ? `${values.message}\nپیشنهاد: ${values.offer}` : values.message });
+
   const title = { work: 'درخواست همکاری تازه', job: 'اعلام آمادگی تازه', consult: 'پاسخ تازه به پرسش شما' }[row.ad.type];
   await notify(row.ownerId, {
     type: 'req',
     title,
     body: `${profile.displayName} برای «${row.ad.title}»`,
-    link: { screen: 'myads', id: adId },
+    link: { screen: 'chat', id: conv.id },
   });
-  return resp;
+  return { ...resp, conversationId: conv.id };
 }
 
 export async function listResponses(profile: Profile, adId: string) {
@@ -325,6 +332,19 @@ export async function answerResponse(profile: Profile, responseId: string, statu
     .set({ status, respondedAt: new Date() })
     .where(eq(adResponses.id, responseId))
     .returning();
+
+  const [conv] = await db
+    .select({ c: conversations })
+    .from(conversations)
+    .innerJoin(conversationMembers, eq(conversationMembers.conversationId, conversations.id))
+    .where(and(eq(conversations.adId, row.ad.id), eq(conversationMembers.profileId, row.r.profileId)))
+    .limit(1);
+  if (conv) {
+    await postMessage(conv.c, null, {
+      kind: 'sys',
+      body: status === 'accepted' ? 'درخواست پذیرفته شد. شرایط را این‌جا نهایی کنید و «پیشنهاد توافق» بفرستید.' : 'درخواست رد شد.',
+    });
+  }
 
   await notify(row.responderUserId, {
     type: 'req',

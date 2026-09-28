@@ -2,75 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { adResponses, ads, guarantees, profiles, reviews, users } from '../../db/schema';
+import { guarantees, profiles, users } from '../../db/schema';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizePhone, maskPhone } from '../../lib/text';
 import { requireAuth, requireProfile } from '../../middlewares/auth';
 import { notify } from '../notifications/notify';
-
-/* ---------- نظرها: فقط بعد از همکاری پذیرفته‌شده ---------- */
-export const reviewsRouter = Router();
-
-reviewsRouter.post(
-  '/',
-  requireAuth,
-  ah(async (req, res) => {
-    const body = parse(
-      z.object({
-        responseId: z.string().uuid(),
-        rating: z.number().int().min(1).max(5),
-        text: z.string().trim().max(1000).optional(),
-      }),
-      req.body,
-    );
-    const [row] = await db
-      .select({ r: adResponses, adProfileId: ads.profileId, adTitle: ads.title })
-      .from(adResponses)
-      .innerJoin(ads, eq(ads.id, adResponses.adId))
-      .where(eq(adResponses.id, body.responseId))
-      .limit(1);
-    if (!row) throw notFound('همکاری پیدا نشد');
-    if (row.r.status !== 'accepted') throw badRequest('فقط بعد از همکاری پذیرفته‌شده می‌توان نظر داد', 'NOT_ACCEPTED');
-
-    const both = await db
-      .select({ id: profiles.id, userId: profiles.userId, name: profiles.displayName })
-      .from(profiles)
-      .where(sql`${profiles.id} in (${row.adProfileId}, ${row.r.profileId})`);
-    const adP = both.find((p) => p.id === row.adProfileId)!;
-    const respP = both.find((p) => p.id === row.r.profileId)!;
-    const me = req.user!.id;
-    const [from, to] = adP.userId === me ? [adP, respP] : respP.userId === me ? [respP, adP] : [null, null];
-    if (!from || !to) throw forbidden('شما طرف این همکاری نیستید');
-
-    const review = await db.transaction(async (tx) => {
-      const [rv] = await tx
-        .insert(reviews)
-        .values({ responseId: body.responseId, fromProfileId: from.id, toProfileId: to.id, rating: body.rating, text: body.text || null })
-        .onConflictDoNothing()
-        .returning();
-      if (!rv) throw conflict('برای این همکاری قبلاً نظر داده‌اید', 'ALREADY_REVIEWED');
-      // میانگین و تعداد نظر + یک پروژهٔ انجام‌شده
-      await tx
-        .update(profiles)
-        .set({
-          ratingAvg: sql`(${profiles.ratingAvg} * ${profiles.ratingCount} + ${body.rating}) / (${profiles.ratingCount} + 1)`,
-          ratingCount: sql`${profiles.ratingCount} + 1`,
-          doneCount: sql`${profiles.doneCount} + 1`,
-        })
-        .where(eq(profiles.id, to.id));
-      return rv;
-    });
-
-    await notify(to.userId, {
-      type: 'star',
-      title: `${from.name} به شما ${body.rating} ستاره داد`,
-      body: body.text?.slice(0, 120),
-      link: { screen: 'trust' },
-    });
-    res.status(201).json({ review });
-  }),
-);
 
 /* ---------- قیم (ضامن) ---------- */
 export const guaranteesRouter = Router();

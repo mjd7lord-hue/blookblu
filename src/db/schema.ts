@@ -231,10 +231,9 @@ export const reviews = pgTable(
   'reviews',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    // نظر فقط بعد از همکاری واقعی (پاسخ پذیرفته‌شده) ثبت می‌شود
-    responseId: uuid('response_id')
-      .notNull()
-      .references(() => adResponses.id, { onDelete: 'cascade' }),
+    // نظر فقط بعد از همکاری واقعی ثبت می‌شود: پروژهٔ تمام‌شده (فاز ۲) — responseId برای داده‌های فاز ۱ نگه داشته شده
+    responseId: uuid('response_id').references(() => adResponses.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
     fromProfileId: uuid('from_profile_id')
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
@@ -247,6 +246,7 @@ export const reviews = pgTable(
   },
   (t) => [
     uniqueIndex('reviews_response_from_uq').on(t.responseId, t.fromProfileId),
+    uniqueIndex('reviews_project_from_uq').on(t.projectId, t.fromProfileId),
     index('reviews_to_idx').on(t.toProfileId, t.createdAt),
   ],
 );
@@ -319,4 +319,120 @@ export const blocks = pgTable(
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.blockerUserId, t.blockedUserId] })],
+);
+
+/* ================= فاز ۲: گفت‌وگو، توافق، پروژه ================= */
+
+export const conversationKindEnum = pgEnum('conversation_kind', ['ad', 'direct', 'project', 'support']);
+export const MESSAGE_KINDS = ['text', 'loc', 'phone', 'photo', 'file', 'voice', 'deal', 'day', 'sys', 'del'] as const;
+export const messageKindEnum = pgEnum('message_kind', MESSAGE_KINDS);
+export const proposalStatusEnum = pgEnum('proposal_status', ['pending', 'accepted', 'rejected', 'cancelled']);
+export const projectStatusEnum = pgEnum('project_status', ['active', 'done', 'cancelled']);
+
+// مراحل همکاری (هم‌تراز با اپ): ۰ پیشنهاد، ۱ توافق، ۲ در حال اجرا، ۳ تمام
+export const STAGES = ['پیشنهاد', 'توافق', 'در حال اجرا', 'تمام'] as const;
+
+export const conversations = pgTable(
+  'conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: conversationKindEnum('kind').notNull(),
+    adId: uuid('ad_id').references(() => ads.id, { onDelete: 'set null' }),
+    projectId: uuid('project_id'),
+    title: varchar('title', { length: 160 }),
+    stage: smallint('stage').notNull().default(0),
+    lastMessageAt: ts('last_message_at').notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('conv_ad_idx').on(t.adId)],
+);
+
+export const conversationMembers = pgTable(
+  'conversation_members',
+  {
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    unread: integer('unread').notNull().default(0),
+    lastReadAt: ts('last_read_at'),
+    muted: boolean('muted').notNull().default(false),
+    archived: boolean('archived').notNull().default(false),
+    pinned: boolean('pinned').notNull().default(false),
+    // «حذف گفت‌وگو» فقط برای خود کاربر پنهانش می‌کند؛ پیام تازه دوباره نشانش می‌دهد
+    hiddenAt: ts('hidden_at'),
+  },
+  (t) => [primaryKey({ columns: [t.conversationId, t.profileId] }), index('conv_members_user_idx').on(t.userId)],
+);
+
+export type DealPayload = {
+  job: string;
+  qty?: string | null;
+  price: string;
+  amount?: number | null;
+  start: string;
+  durationDays: number;
+  plan: { title: string; pct: number }[];
+  retentionPct: number;
+};
+export type DayPayload = { date: string; hour: string };
+
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    senderProfileId: uuid('sender_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    kind: messageKindEnum('kind').notNull(),
+    body: text('body'),
+    payload: jsonb('payload').$type<Record<string, unknown>>(),
+    // برای پیشنهاد توافق و روز شروع
+    status: proposalStatusEnum('status'),
+    // پیام مشکوک (درخواست پیش‌پرداخت، شمارهٔ کارت)
+    flagged: boolean('flagged').notNull().default(false),
+    projectId: uuid('project_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('messages_conv_idx').on(t.conversationId, t.createdAt)],
+);
+
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: varchar('title', { length: 160 }).notNull(),
+    clientProfileId: uuid('client_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    providerProfileId: uuid('provider_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    dealMessageId: uuid('deal_message_id'),
+    adId: uuid('ad_id').references(() => ads.id, { onDelete: 'set null' }),
+    stage: smallint('stage').notNull().default(1),
+    status: projectStatusEnum('status').notNull().default('active'),
+    quantity: varchar('quantity', { length: 80 }),
+    priceText: varchar('price_text', { length: 120 }).notNull(),
+    amount: bigint('amount', { mode: 'number' }),
+    startText: varchar('start_text', { length: 80 }),
+    startDate: varchar('start_date', { length: 40 }),
+    durationDays: smallint('duration_days'),
+    paymentPlan: jsonb('payment_plan').$type<{ title: string; pct: number }[]>().notNull(),
+    retentionPct: smallint('retention_pct').notNull().default(0),
+    startedAt: ts('started_at'),
+    finishedAt: ts('finished_at'),
+    cancelledAt: ts('cancelled_at'),
+    cancelReason: text('cancel_reason'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('projects_client_idx').on(t.clientProfileId), index('projects_provider_idx').on(t.providerProfileId)],
 );

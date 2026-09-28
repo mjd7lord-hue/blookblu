@@ -66,32 +66,17 @@ describe('ads, explore, responses, reviews', () => {
     const out = await api().get('/api/responses').query({ dir: 'out' }).set(auth(worker.token));
     expect(out.body.items[0].ad.id).toBe(adId);
 
-    // قبل از پذیرش، نظر ممنوع
-    const early = await api().post('/api/reviews').set(auth(boss.token)).send({ responseId: resp.body.response.id, rating: 5 });
-    expect(early.body.error.code).toBe('NOT_ACCEPTED');
-
     const acc = await api().patch(`/api/responses/${resp.body.response.id}`).set(auth(boss.token)).send({ status: 'accepted' });
     expect(acc.body.response.status).toBe('accepted');
     // کارگر نمی‌تواند درخواست خودش را بپذیرد
     const hack = await api().patch(`/api/responses/${resp.body.response.id}`).set(auth(worker.token)).send({ status: 'accepted' });
     expect(hack.status).toBe(403);
 
-    const rv = await api()
-      .post('/api/reviews')
-      .set(auth(boss.token))
-      .send({ responseId: resp.body.response.id, rating: 5, text: 'دقیق و منظم' });
-    expect(rv.status).toBe(201);
-    const rv2 = await api().post('/api/reviews').set(auth(boss.token)).send({ responseId: resp.body.response.id, rating: 1 });
-    expect(rv2.status).toBe(409);
-    // غریبه نمی‌تواند نظر بدهد
-    const rv3 = await api().post('/api/reviews').set(auth(eng.token)).send({ responseId: resp.body.response.id, rating: 1 });
-    expect(rv3.status).toBe(403);
-
-    const wp = await api().get(`/api/profiles/${worker.profile.code}`);
-    expect(wp.body.profile.rating).toBe(5);
-    expect(wp.body.profile.trust).toMatchObject({ satisfaction: 55, projects: 1, reviews: 1, total: 57 });
-    expect(wp.body.profile.stars).toEqual([1, 0, 0, 0, 0]);
-    expect(wp.body.profile.reviews[0].text).toBe('دقیق و منظم');
+    // پاسخ به آگهی یک گفت‌وگو می‌سازد: سیستمی + پیام پاسخ + پیام پذیرش
+    expect(resp.body.response.conversationId).toBeTruthy();
+    const conv = await api().get(`/api/conversations/${resp.body.response.conversationId}/messages`).set(auth(boss.token));
+    expect(conv.body.items.map((m: { kind: string }) => m.kind)).toEqual(['sys', 'text', 'sys']);
+    expect(conv.body.items[1].body).toContain('از فردا می‌آیم');
 
     // مدیریت آگهی
     const paused = await api().patch(`/api/ads/${adId}`).set(auth(boss.token)).send({ status: 'paused' });
