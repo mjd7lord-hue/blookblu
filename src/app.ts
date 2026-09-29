@@ -23,6 +23,7 @@ import fileRoutes from './modules/files/files.routes';
 import mediaRoutes from './modules/files/media.routes';
 import kycRoutes from './modules/kyc/kyc.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import adminPanelRoutes from './modules/admin/panel';
 import { contractPrintRouter, projectContractRouter } from './modules/contracts/contract.routes';
 import { paymentsRouter, projectPaymentsRouter } from './modules/projects/payments';
 import { projectStatementsRouter, statementsRouter } from './modules/projects/statements';
@@ -85,6 +86,8 @@ export function createApp() {
   app.use('/api/disputes', disputesRouter);
   app.use('/api/arbitration', arbiterRouter);
   app.use('/api/admin/arbitration', adminArbitrationRouter);
+  // فاز ۸: پنل ادمین (نقش‌ها، مدیران، تصویر لحظه‌ای)
+  app.use('/api/admin/panel', adminPanelRoutes);
   app.use('/api/events', eventsRoutes);
   app.use('/api/guarantees', guaranteesRouter);
   app.use('/api/notifications', notificationRoutes);

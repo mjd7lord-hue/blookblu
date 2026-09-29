@@ -426,3 +426,26 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/admin/arbitration/cases/:id/refund` | `{ reason }` | حل‌کننده نیامد / پیش از رأی: کل مبلغ برمی‌گردد و ثبت‌کننده می‌تواند دوباره درخواست بدهد |
 
 `feeReturnDue=true` در دور بازبینی یعنی رأی عوض شد و هزینهٔ بازبینی باید به معترض برگردد (فعلاً دستی).
+
+---
+
+# فاز ۸: پنل ادمین — نقش‌ها، دسترسی‌ها، مدیران 🛡
+
+پنل (`blookblu-admin`) با همان ورود پیامکی اپ وارد می‌شود (`/auth/otp/send` و `/auth/otp/verify`)، بعد `/admin/panel/me`.
+هر مسیر `/admin/*` نقش مدیر را بررسی می‌کند؛ نبودِ دسترسی ← `403 NO_PERMISSION`، مدیر نبودن ← `403 NOT_ADMIN`.
+
+**نقش‌ها** (جدول `admin_roles`، هم‌تراز با `AROLES` پنل): `owner` مدیر ارشد (همه‌چیز، ثابت) · `content` ناظر محتوا · `support` پشتیبان · `finance` مالی · `arbit` مسئول داوری · `kyc` کارشناس احراز.
+دسترسی هر نقش برای ۲۴ بخش پنل: `0` ندارد، `1` مشاهده، `2` ویرایش. **محدودهٔ استان** هر مدیر (`provinces`، خالی = همهٔ ایران) داده‌های تصویر لحظه‌ای را فیلتر می‌کند.
+کاربر قدیمیِ `is_admin` خودکار «مدیر ارشد» می‌شود. `npm run admin:grant -- 09xx [--role=kyc]`.
+
+| متد | مسیر | دسترسی | توضیح |
+|---|---|---|---|
+| GET | `/admin/panel/me` | هر مدیر | `{ admin: { id, name, roleKey, roleName, perms, provinces, phone }, modules, roles }` |
+| GET | `/admin/panel/snapshot` | به تفکیک بخش | فقط بخش‌های مجاز: `users` (با مدارک و KYC اگر `kyc`)، `ads`، `reports`، `projects`، `disputes` (+ `cases`)، `arbiters`، `guarantees`، `admins`، `audit`، `stats` (سری ۳۰ روزهٔ ثبت‌نام/آگهی/قرارداد، ترکیب نقش و استان، کارهای در انتظار) |
+| PATCH | `/admin/panel/roles/:key` | admins:2 | `{ perms?: { ads: 2, ... }, name?, color? }` — مدیر ارشد ثابت است (`ROLE_FIXED`) |
+| POST | `/admin/panel/admins` | admins:2 | `{ phone, name, roleKey, provinces }` — کاربر اگر نبود ساخته می‌شود؛ مدیر ارشد تازه فقط با مدیر ارشد |
+| PATCH | `/admin/panel/admins/:id` | admins:2 | `{ name?, roleKey?, provinces?, status: active\|disabled }` — خودت (`SELF`) و آخرین مدیر ارشد (`LAST_OWNER`) نه |
+| PATCH | `/admin/panel/ads/:id/status` | ads:2 | `{ status: active\|paused\|closed\|removed, reason? }` — به صاحب آگهی اعلان می‌رود |
+| PATCH / DELETE | `/admin/panel/guarantees/:id` | guar:2 | `{ status: accepted\|rejected }` |
+
+دسترسی مسیرهای قبلی: KYC و مدارک ← `kyc` · گزارش‌ها ← `reports` · کاربران و تعلیق ← `users` · حذف آگهی ← `ads` · ردپا ← `audit` · حل‌کننده‌ها ← `arbiters` · پرونده‌ها و تعیین حل‌کننده ← `disputes` · تأیید پرداخت و برگشت پول ← `pay`.

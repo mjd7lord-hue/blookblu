@@ -876,3 +876,48 @@ export const arbiterRatings = pgTable(
   },
   (t) => [primaryKey({ columns: [t.caseId, t.fromProfileId] })],
 );
+
+/* ================= فاز ۸: نقش‌های مدیر و دسترسی‌ها (پنل ادمین) ================= */
+
+// بخش‌های پنل — هم‌تراز با MODS در blookblu-admin/assets/js/data/sample-data.js
+export const ADMIN_MODULES = [
+  'dash', 'users', 'kyc', 'ads', 'chats', 'support', 'reports', 'qa', 'projects', 'pay', 'disputes', 'arbiters',
+  'guar', 'score', 'notif', 'stories', 'academy', 'catalog', 'legal', 'coefs', 'settings', 'status', 'admins', 'audit',
+] as const;
+export type AdminModule = (typeof ADMIN_MODULES)[number];
+/** ۰ = ندارد، ۱ = مشاهده، ۲ = ویرایش */
+export type AdminPerms = Partial<Record<AdminModule, 0 | 1 | 2>>;
+
+export const adminStatusEnum = pgEnum('admin_status', ['active', 'disabled']);
+
+export const adminRoles = pgTable('admin_roles', {
+  key: varchar('key', { length: 20 }).primaryKey(), // owner, content, support, finance, arbit, kyc
+  name: varchar('name', { length: 40 }).notNull(),
+  color: varchar('color', { length: 12 }).notNull().default('#888888'),
+  perms: jsonb('perms').$type<AdminPerms>().notNull(),
+  fixed: boolean('fixed').notNull().default(false), // مدیر ارشد: قابل تغییر نیست
+  updatedAt: updatedAt(),
+});
+
+export const admins = pgTable(
+  'admins',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleKey: varchar('role_key', { length: 20 })
+      .notNull()
+      .references(() => adminRoles.key),
+    name: varchar('name', { length: 80 }).notNull(),
+    // محدودهٔ استان؛ خالی = همهٔ ایران
+    provinces: text('provinces').array().notNull().default(sql`'{}'::text[]`),
+    status: adminStatusEnum('status').notNull().default('active'),
+    createdBy: uuid('created_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+    lastSeenAt: ts('last_seen_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('admins_role_idx').on(t.roleKey)],
+);

@@ -43,6 +43,13 @@
       "when": 1790597305040,
       "tag": "0005_arbitration",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790668674875,
+      "tag": "0006_admin_roles",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,7 @@ import { db } from '../../db';
 import { profiles } from '../../db/schema';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { toLatinDigits } from '../../lib/text';
-import { requireAdmin, requireAuth, requireProfile } from '../../middlewares/auth';
+import { perm, requireAdmin, requireAuth, requireProfile } from '../../middlewares/auth';
 import { photosUpload, singleFile, uploadLimiter } from '../files/upload';
 import { ARB_AMOUNT_TIERS, ARB_BASE, ARB_FIELD_KEYS, ARB_FIELDS, ARB_TRAVEL, type ArbField } from './fees';
 import * as svc from './arbitration.service';
@@ -237,6 +237,7 @@ adminArbitrationRouter.use(requireAdmin);
 
 adminArbitrationRouter.get(
   '/stats',
+  perm('disputes'),
   ah(async (_req, res) => {
     res.json(await svc.arbitrationStats());
   }),
@@ -244,6 +245,7 @@ adminArbitrationRouter.get(
 
 adminArbitrationRouter.get(
   '/arbiters',
+  perm('arbiters'),
   ah(async (req, res) => {
     const { status } = parse(z.object({ status: z.enum(['pending', 'approved', 'rejected', 'suspended']).default('pending') }), req.query);
     res.json({ items: await svc.adminListArbiters(status) });
@@ -252,6 +254,7 @@ adminArbitrationRouter.get(
 
 adminArbitrationRouter.post(
   '/arbiters/:id/:action(approve|reject|suspend)',
+  perm('arbiters', 2),
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
     const action = req.params.action as 'approve' | 'reject' | 'suspend';
@@ -266,6 +269,7 @@ adminArbitrationRouter.post(
 
 adminArbitrationRouter.get(
   '/cases',
+  perm('disputes'),
   ah(async (req, res) => {
     const { status } = parse(
       z.object({ status: z.enum(['awaiting_payment', 'matching', 'offered', 'assigned', 'reported', 'appealed', 'final', 'refunded', 'cancelled']).optional() }),
@@ -277,6 +281,7 @@ adminArbitrationRouter.get(
 
 adminArbitrationRouter.post(
   '/cases/:id/confirm-payment',
+  perm('pay', 2),
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
     const { ref } = parse(z.object({ ref: z.string().trim().min(3, 'شمارهٔ پیگیری پرداخت را بنویس').max(80) }), req.body);
@@ -286,6 +291,7 @@ adminArbitrationRouter.post(
 
 adminArbitrationRouter.post(
   '/cases/:id/assign',
+  perm('disputes', 2),
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
     const { arbiterId } = parse(z.object({ arbiterId: z.string().uuid() }), req.body);
@@ -295,6 +301,7 @@ adminArbitrationRouter.post(
 
 adminArbitrationRouter.post(
   '/cases/:id/refund',
+  perm('pay', 2),
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
     const { reason } = parse(z.object({ reason: z.string().trim().min(3, 'دلیل را بنویس').max(500) }), req.body);

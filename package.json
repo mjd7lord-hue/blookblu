@@ -18,6 +18,7 @@
     "admin:grant": "tsx scripts/admin-grant.ts",
     "sms:test": "tsx scripts/sms-test.ts",
     "front:smoke": "tsx scripts/front-smoke.js",
+    "admin:smoke": "tsx scripts/admin-smoke.js",
     "start:server": "node dist/server.js"
   },
   "license": "UNLICENSED",
