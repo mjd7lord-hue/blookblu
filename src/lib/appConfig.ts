@@ -111,6 +111,20 @@ export const DEFAULTS = {
     roles: Record<string, { on?: boolean; n?: string; d?: string }>;
     custom: Record<string, 'ok' | 'rej' | { to: string }>;
   },
+  // «تازه‌های بلوک»: بعد از هر به‌روزرسانی، هنگام ورود به اپ حداکثر ۲ بار نشان داده می‌شود (هر v تازه = دوباره)
+  whatsNew: {
+    on: true,
+    v: '1405-07-07',
+    title: 'تازه‌های بلوک',
+    items: [
+      { t: 'پروفایل و شناسنامهٔ کاری در یک صفحه', d: 'در «من» پروفایلت را باز کن؛ بالای صفحه بین «پروفایل» و «شناسنامهٔ کاری» جابه‌جا شو.' },
+      { t: 'برگشت راحت‌تر', d: 'نوار بالای هر صفحه همیشه دیده می‌شود. یا انگشتت را از لبهٔ صفحه به سمت وسط بکش.' },
+      { t: 'راهنمای بالا بردن امتیاز', d: 'در شناسنامهٔ کاری، قدم‌های بعدی برای امتیاز بیشتر را با یک لمس انجام بده.' },
+      { t: 'نشان قرمز مدارک', d: 'اگر مدرک لازمی مانده باشد، روی «مدارک من» نشان قرمز می‌بینی.' },
+      { t: 'آگهی خودت در کاوش', d: 'اگر آگهی‌ات در زبانهٔ دیگر کاوش است، بالای نتیجه‌ها کارتش را می‌بینی.' },
+      { t: 'سریع‌تر و بدون زوم', d: 'صفحه‌ها فوری باز می‌شوند و صفحه دیگر زوم نمی‌شود یا نمی‌لرزد.' },
+    ] as { t: string; d: string }[],
+  },
   // متن و روشن/خاموش اعلان‌های خودکار (نمایشی در پنل)، و قیمت ارتقای آگهی — فعلاً فقط ذخیره می‌شوند
   notifTemplates: null as unknown,
   boost: null as unknown,
@@ -164,6 +178,12 @@ const SCHEMAS: Partial<Record<ConfigKey, z.ZodTypeAny>> = {
     )
     .max(200),
   visitTypes: z.array(z.object({ n: z.string().min(2).max(80), d: z.string().max(30), p: z.number().int().min(0) })).min(1).max(20),
+  whatsNew: z.object({
+    on: z.boolean(),
+    v: z.string().trim().min(1).max(30),
+    title: z.string().trim().min(2).max(80),
+    items: z.array(z.object({ t: z.string().trim().min(2).max(120), d: z.string().trim().max(400) })).max(12),
+  }),
   catalog: z.object({ roles: z.record(z.string(), z.object({ on: z.boolean().optional(), n: z.string().max(40).optional(), d: z.string().max(200).optional() })).default({}), custom: z.record(z.string(), z.unknown()).default({}) }).passthrough(),
 };
 

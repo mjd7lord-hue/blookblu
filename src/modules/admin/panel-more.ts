@@ -387,6 +387,7 @@ const CONFIG_MODULE: Record<ConfigKey, AdminModule> = {
   stories: 'stories',
   courses: 'academy',
   visitTypes: 'coefs',
+  whatsNew: 'settings',
 };
 
 r.put(

@@ -27,6 +27,7 @@ export function publicConfig() {
     stories: s.flags.stories === false ? [] : cfg('stories').filter((x) => x.on),
     coefs: cfg('coefs'),
     visitTypes: cfg('visitTypes'),
+    whatsNew: cfg('whatsNew').on ? cfg('whatsNew') : null,
     roles: Object.fromEntries(ROLES.map((k) => [k, { on: cat.roles?.[k]?.on !== false }])),
   };
 }

@@ -200,6 +200,15 @@ async function user(phone, role, data) {
   await until(async () => (await call('GET', '/disputes/meta')).base === base0, 'coef restored');
   log('تنظیمات، استوری و ضرایب داوری از پنل ذخیره شدند');
 
+  // تازه‌های بلوک: انتشار نسخهٔ تازه + اعلان
+  ev("go('settings')");
+  await until(() => $('wnCard'), 'whats new card');
+  const v0 = (await call('GET', '/app/config')).whatsNew.v;
+  ev("ADMIN_LIVE.wnGet().items[0].t='رزرو بازدید مهندس';ADMIN_LIVE.wnSave(true)");
+  await until(async () => (await call('GET', '/app/config')).whatsNew.v !== v0, 'whats new published');
+  await until(async () => JSON.stringify(await call('GET', '/notifications', null, w.token)).includes('تازه‌های بلوک'), 'whats new notification');
+  log('تازه‌های بلوک منتشر شد (نسخهٔ', (await call('GET', '/app/config')).whatsNew.v + ') و اعلانش به کاربران رسید');
+
   ev("go('status')");
   await until(() => $('page').textContent.includes('پایش شبانه‌روزی'), 'status page');
   ev("go('pay')");
