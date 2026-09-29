@@ -366,7 +366,7 @@ async function register(w, role, data) {
   // بخش ۵: راهنمای امتیاز، نشان مدارک ناقص، راهنمای قرارداد، شهر کشویی، سال تولد
   ev(B, "openTrust('me')");
   await until(() => B.document.querySelector('#blkSteps'), 'trust steps');
-  log('راهنمای بالا بردن امتیاز:', B.document.querySelectorAll('#blkSteps .need').length, 'قدم ·', B.document.querySelector('#blkSteps .need b').textContent);
+  log('راهنمای بالا بردن امتیاز:', B.document.querySelectorAll('#blkSteps .tstep').length, 'قدم ·', B.document.querySelector('#blkSteps .tstep b').textContent);
   ev(B, "go('me')");
   await until(() => B.document.querySelector(DOCSEL), 'docs red badge');
   ev(B, "go('docs')");
