@@ -26,7 +26,7 @@ Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · *
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
 npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
-npm test               # ۵۰ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm test               # ۵۸ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
@@ -34,7 +34,7 @@ npm run admin:grant -- 09xxxxxxxxx   # ادمین کردن کاربر (لغو: -
 npm run sms:test -- 09xxxxxxxxx      # آزمایش پنل پیامک (ملی‌پیامک) با تنظیمات .env
 npm run alert:test                   # آزمایش پیامک هشدار سرور به ALERT_PHONES (ملی‌پیامک: MELIPAYAMAK_FROM لازم)
 npm run front:smoke    # فرانت (../blookblu-front) در jsdom در برابر همین API روی دیتابیس تست — بعد از هر تغییر live.js
-npm run admin:smoke    # پنل ادمین (../blookblu-admin) در jsdom: ورود مدیر، KYC، تعلیق، ساخت مدیر، دسترسی نقش
+npm run admin:smoke    # پنل ادمین (../blookblu-admin) در jsdom: ورود، KYC، تعلیق، مدیران، گفت‌وگو، تیکت، اعلان همگانی، تنظیمات، ضرایب
 npm run db:seed        # ۴ کاربر و آگهی نمونه (فقط توسعه)
 npm run build && npm start   # start اول migration می‌زند
 ```
@@ -46,6 +46,7 @@ npm run build && npm start   # start اول migration می‌زند
 src/config/env.ts          متغیرهای محیطی با zod (پیام خطای فارسی)
 src/db/schema.ts           همهٔ جدول‌ها (فاز ۱ بالا، فاز ۲ پایین فایل)
 src/lib/                   errors, http (ah/parse), text (شماره/فارسی), jwt, sms, events (SSE), flag (ضدکلاهبرداری), storage (supabase/local/s3)
+                           appConfig (تنظیمات پنل در حافظه: cfg/flag)، dates (روز تهران)، metrics، monitor
 src/middlewares/auth.ts    requireAuth · optionalAuth · requireProfile (req.profile = پروفایل نقش فعال) · requireAdmin
 src/modules/
   auth/        OTP ۵ رقمی، refresh چرخشی با تشخیص سرقت
@@ -59,6 +60,9 @@ src/modules/
   files/       آپلود (multer در حافظه، فیلد file)، تشخیص نوع از محتوا، حذف EXIF، لینک امضاشده؛ عکس پروفایل، نمونه‌کار، مدارک
   kyc/         تأیید هویت (/api/me/kyc): کارت + سلفی، کد ملی با رقم کنترل؛ عکس‌ها بعد از بررسی پاک
   admin/       پنل ادمین (/api/admin): صف KYC و مدارک، گزارش‌ها، مسدودسازی، حذف آگهی، ردپا (admin_actions)، recomputeVerified
+               panel.ts (نقش‌ها، مدیران، snapshot) · panel-more.ts (گفت‌وگو، تیکت، اعلان همگانی، config، مورد دیگر، تراکنش، تسویه، وضعیت)
+  content/     /api/app: تنظیمات عمومی اپ، استوری، آکادمی، باز کردن پشتیبانی
+  team/        /api/me/team: تیم و حضور و غیاب · visits/ /api/visits: رزرو بازدید مهندس
   arbitration/ حل اختلاف و داوری حضوری: fees.ts (فرمول هزینه = هم‌تراز ARB_F/arbFee فرانت) · candidates (بی‌طرفی: بدون گفت‌وگو/پروژهٔ مشترک)
                پرونده: open → arbitration → decided/settled · دور داوری: awaiting_payment → matching → offered → assigned → reported → final (+ بازبینی round=2)
   trust/ saved/ notifications/ safety/
@@ -83,7 +87,9 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
 - کد پیامکی همیشه با `purpose` (`login` یا `sign` + ctx) — کد یک کاربرد برای دیگری قبول نمی‌شود. امضای قرارداد به `contentHash` (canonicalJson متن) گره خورده؛ هر ویرایش = نسخهٔ تازه.
 - مبلغ‌ها عدد صحیح تومان؛ ورودی مبلغ با `moneyInput` از `lib/http` (ارقام فارسی و ٬ قبول).
 - داوری: فرمول هزینه، حوزه‌ها و متن مادهٔ ۷ قرارداد باید با فرانت (دور ۲۵) یکی بماند. پرداخت امانی فعلاً دستی (ادمین `confirm-payment`)؛ درگاه بانکی بعداً.
-- هر کار ادمین = یک ردیف در `admin_actions` (تابع `adminLog` در admin.service). ادمین فقط با اسکریپت ساخته می‌شود، نه API.
+- هر کار ادمین = یک ردیف در `admin_actions` (تابع `adminLog` در admin.service). اولین مدیر ارشد با `admin:grant`؛ بقیه را مدیر دارای دسترسی «مدیران» از پنل می‌سازد.
+- تنظیمی که مدیر عوض می‌کند (ضرایب، قابلیت‌ها، قوانین…) از `cfg(key)` در `lib/appConfig` خوانده شود، نه ثابت در کد؛ پیش‌فرض همان‌جا و هم‌تراز با فرانت.
+- drizzle در select تک‌جدولی نام جدول را نمی‌نویسد: در زیرپرس‌وجوی همبسته ستون بیرونی را کامل بنویس (`"conversations"."id"`).
 - فایل: همیشه با `saveUpload` از `modules/files/files.service` (نوع و حجم را همان‌جا چک می‌کند) و حذف با `purgeFiles` (ردیف + خود فایل). فایل خصوصی فقط با `fileUrl` (لینک امضاشده) به کسی داده شود که اجازه دارد. کلید `SUPABASE_SERVICE_ROLE_KEY` فقط در `.env` بک‌اند؛ هرگز در فرانت.
 
 ## وضعیت
@@ -97,14 +103,11 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
 - ✅ فاز ۶ (بخش ۲): `live-projects.js` — پروژه‌ها، قرارداد و امضای پیامکی، پرداخت، صورت‌وضعیت، گزارش روزانه، فایل پروژه، حل اختلاف و داوری (هر دو طرف و حل‌کننده)، مدارک، نمونه‌کار، عکس پروفایل. `front:smoke` همهٔ این مسیرها را با سه کاربر می‌آزماید
 - ✅ فاز ۶ (بخش ۳): `live-more.js` — ذخیره‌ها، آگهی‌های من و پاسخ‌ها، مرکز درخواست‌ها (و کارت درخواست‌ها در خانه)، تقویم ماه جاری شمسی (روزهای آزاد هفتگی = profiles.week)
 - ✅ فاز ۸ (بخش الف): پنل ادمین — نقش‌ها و دسترسی‌ها و محدودهٔ استان، ورود مدیر با پیامک، تصویر لحظه‌ای، اتصال داشبورد/کاربران/احراز/گزارش/آگهی/پروژه/داوری/حل‌کننده/قیم/مدیران/ردپا
+- ✅ فاز ۸ (بخش ب): پنل کامل — گفت‌وگوها و تیکت پشتیبانی، اعلان همگانی، تنظیمات/ضرایب/فهرست‌ها/قوانین/استوری/آکادمی (app_config)، تراکنش و تسویه، وضعیت سرویس؛ اپ (live-more.js بخش ۴): پشتیبانی، استوری، آکادمی با پیشرفت، حالت تعمیر، تیم و حضور و غیاب، رزرو بازدید مهندس و میز کار امروز مهندس
 - ⏭ بعدی (به ترتیب پیشنهادی):
   4. میزبانی: فایل‌ها آماده (render.yaml، پایش، uptime.yml)؛ مانده: ساخت سرویس در Render، DNS دامنهٔ blooko.ir، متغیر API_URL در گیت‌هاب؛ بعد درگاه پرداخت برای داوری
-  - پنل ادمین بخش ب: گفت‌وگوها و تیکت پشتیبانی، اعلان همگانی، تنظیمات/ضرایب/فهرست‌ها/قوانین، استوری و آکادمی، تراکنش‌ها
   - درگاه پرداخت (زرین‌پال یا مشابه) برای هزینهٔ داوری — نیاز به حساب پذیرنده
-  - میزبانی API (فعلاً فقط روی کامپیوتر خود مجید؛ لیارا کنار گذاشته شده)
-  - صفحهٔ گرافیکی پنل ادمین (API آماده است)
-  - تیم و حضور و غیاب — در فرانت نمایشی هست
-  5. تقویم/رزرو بازدید مهندس، Push (سرویس داخلی مثل نجوا/پوشه)
+  5. Push (سرویس داخلی مثل نجوا/پوشه)، زمان‌بندی اعلان همگانی، ارتقای پولی آگهی؛ در فرانت هنوز نمایشی: تأیید بتن‌ریزی مهندس (S.hold) و پروژه‌های نظارتی مهندس
 
 ## گیت
 - پیام commit فارسی و توصیفی.

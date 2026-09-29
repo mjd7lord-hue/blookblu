@@ -138,6 +138,74 @@ async function user(phone, role, data) {
   await until(() => ev('AUDIT.length') >= 4, 'audit');
   log('گزارش فعالیت:', ev('AUDIT.slice(0,3).map(x=>x.t.split(" — ")[0]).join(" | ")'));
 
+  /* ---------- بخش ب ---------- */
+  const reload = () => ev('ADMIN_LIVE.reload().then(()=>rerender())');
+  // گفت‌وگو: پیام مشکوک ← پنهان کردن ← پیام پشتیبانی
+  const cv = await call('POST', '/conversations', { profileCode: w.profile.code }, owner.token);
+  const cid = cv.conversation.id;
+  await call('POST', `/conversations/${cid}/messages`, { kind: 'text', body: 'نصف دستمزد را کارت به کارت کن' }, w.token);
+  await reload();
+  ev("go('chats')");
+  ev(`S.chat='${cid}';AFTER.chats()`);
+  await until(() => ev(`convOf('${cid}')._loaded`), 'chat messages loaded');
+  const fi = ev(`convOf('${cid}').msgs.findIndex(m=>m.flag)`);
+  if (fi < 0) throw new Error('پیام مشکوک علامت نخورده');
+  ev(`msgOp('${cid}',${fi},'hid')`);
+  await until(async () => (await call('GET', `/conversations/${cid}/messages`, null, owner.token)).items.some((m) => m.kind === 'del'), 'message hidden');
+  await until(() => $('admMsg'), 'admin composer');
+  $('admMsg').value = 'پیش‌پرداخت خارج از توافق مجاز نیست.';
+  ev('admSend()');
+  await until(async () => (await call('GET', `/conversations/${cid}/messages`, null, w.token)).items.some((m) => m.admin), 'admin message');
+  log('گفت‌وگو: پیام مشکوک پنهان شد و پیام پشتیبانی به هر دو طرف رسید');
+
+  // پشتیبانی: کاربر می‌نویسد ← پاسخ از پنل
+  const sup = await call('POST', '/app/support', {}, w.token);
+  await call('POST', `/conversations/${sup.conversation.id}/messages`, { kind: 'text', body: 'کد تأیید پیامک دیر می‌رسد' }, w.token);
+  await reload();
+  ev("go('support')");
+  const code = ev("TICKETS.find(t=>t.sub==='کد تأیید پیامک دیر می‌رسد').id");
+  ev(`S.ticket='${code}';rerender()`);
+  await until(() => $('tMsg'), 'ticket view');
+  $('tMsg').value = 'سلام، بررسی شد؛ دوباره امتحان کن.';
+  ev('tSend()');
+  await until(async () => (await call('GET', `/conversations/${sup.conversation.id}/messages`, null, w.token)).items.some((m) => m.admin), 'ticket reply');
+  await until(() => ev(`TICKETS.find(t=>t.id==='${code}').st`) === 'pending', 'ticket pending');
+  log('پشتیبانی: تیکت', code, 'پاسخ گرفت (منتظر کاربر)');
+
+  // اعلان همگانی به کارگرهای هرمزگان
+  ev("go('notif')");
+  ev("S.nd.t='آزمایش اعلان همگانی';S.nd.b='متن آزمایشی';S.nd.roles=['کارگر'];S.nd.provs=['هرمزگان'];rerender()");
+  const est = W.document.querySelector('#page .num[style*="font-size:24px"]').textContent;
+  ev('nSend(0)');
+  await until(async () => JSON.stringify(await call('GET', '/notifications', null, w.token)).includes('آزمایش اعلان همگانی'), 'broadcast received');
+  await until(() => ev('NOTIF_H.length') > 0 && ev('NOTIF_H[0].t') === 'آزمایش اعلان همگانی', 'broadcast history');
+  log('اعلان همگانی رسید · گیرنده‌های تقریبی:', est, '· ارسال‌شده:', ev('NOTIF_H[0].sent'));
+
+  // تنظیمات: خاموش/روشن کردن آکادمی (ذخیرهٔ خودکار)
+  ev("go('settings')");
+  ev("flagSet('academy')");
+  await until(async () => (await call('GET', '/app/config')).flags.academy === false, 'flag saved');
+  ev("flagSet('academy')");
+  await until(async () => (await call('GET', '/app/config')).flags.academy === true, 'flag restored');
+  // استوری تازه
+  ev("go('stories')");
+  ev("STORIES.push({t:'ایمنی گرما',s:'کار سنگین را به صبح ببر',p:'آب خنک و سایه لازم است',on:true,v:0});log('stories','استوری تازه ساخت');rerender()");
+  await until(async () => (await call('GET', '/app/config')).stories.some((x) => x.t === 'ایمنی گرما'), 'story saved');
+  // ضرایب: مبلغ پایهٔ داوری
+  ev("go('coefs')");
+  const base0 = (await call('GET', '/disputes/meta')).base;
+  ev(`CFG.arb.base=${base0 + 100000};log('coefs','آزمایش');rerender()`);
+  await until(async () => (await call('GET', '/disputes/meta')).base === base0 + 100000, 'coef saved');
+  ev(`CFG.arb.base=${base0};log('coefs','برگشت');rerender()`);
+  await until(async () => (await call('GET', '/disputes/meta')).base === base0, 'coef restored');
+  log('تنظیمات، استوری و ضرایب داوری از پنل ذخیره شدند');
+
+  ev("go('status')");
+  await until(() => $('page').textContent.includes('پایش شبانه‌روزی'), 'status page');
+  ev("go('pay')");
+  ev("go('audit')");
+  log('وضعیت سرویس و صفحهٔ پرداخت بی‌خطا · آخرین فعالیت:', ev('AUDIT[0].t'));
+
   ev('openSwitch()');
   ev('ADMIN_LIVE.logout()');
   await until(() => $('lgPh'), 'logged out');

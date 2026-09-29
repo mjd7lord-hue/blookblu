@@ -313,6 +313,55 @@ async function register(w, role, data) {
   await until(() => ev(C, 'S.arbMe && S.arbMe.st') === 'review', 'arbiter applied');
   log('مهندس درخواست حل‌کنندگی داد؛ وضعیت: در حال بررسی · حوزه‌ها', ev(C, 'S.arbMe.fields.join(",")'));
 
+  /* ---------- بخش ۴: بازدید مهندس، تیم، پشتیبانی، آکادمی، استوری و قوانین ---------- */
+  const cCode = ev(C, 'LIVE.pub.code');
+  await ev(C, "LIVE.api('PUT','/me/roles/engineer/week',{week:['a','a','a','a','a','a','a']})");
+  await ev(A, `LIVE.api('GET','/profiles/${cCode}').then(d=>LIVE.fillPerson(d.profile))`);
+  ev(A, `openVisit('${cCode}')`);
+  await until(() => ev(A, "S.cur==='visit' && LIVE.vs && document.querySelector('#s-visit .vdays')"), 'visit page');
+  const vdi = ev(A, 'LIVE.vs.days.findIndex(d=>d.open)');
+  ev(A, `vPick('t',1);vPick('d',${vdi});vPick('s',1);S.visit.addr='قشم، درگهان، کوچهٔ ۱۲';vConfirm()`);
+  await until(() => ev(A, "(LIVE.visits||[]).some(v=>v.status==='requested')"), 'visit booked');
+  log('رزرو بازدید مهندس:', ev(A, 'LIVE.visits[0].typeName'), '·', ev(A, 'LIVE.visits[0].dayLabel'), ev(A, 'LIVE.visits[0].slot'));
+  await ev(C, 'LIVE.loadRequests(true)');
+  ev(C, "S.rtab='in';go('req')");
+  await until(() => ev(C, "(S.req.engineer||[]).some(r=>r._visit)"), 'engineer sees visit request');
+  ev(C, "rqAns(S.req.engineer.findIndex(r=>r._visit),'ok')");
+  await until(async () => (await ev(A, "LIVE.api('GET','/visits')")).items[0].status === 'confirmed', 'visit confirmed');
+  log('مهندس درخواست بازدید را از مرکز درخواست‌ها تأیید کرد');
+
+  ev(A, "go('team')");
+  await until(() => ev(A, "S.cur==='team' && LIVE.team"), 'team loaded');
+  ev(A, "addMember()");
+  ev(A, "document.getElementById('tmN').value='حسین کمالی';document.getElementById('tmW').value='۲٬۲۰۰٬۰۰۰';saveMember()");
+  await until(() => ev(A, 'S.team.length') === 1 && ev(A, 'S.team[0]._id'), 'member added');
+  ev(A, 'tmToggle(0)');
+  await until(async () => { const t = await ev(A, "LIVE.api('GET','/me/team')"); return t.items[0].days[t.today] === ev(A, 'S.today[0]') && ev(A, 'S.today[0]') !== 'p'; }, 'attendance saved');
+  log('تیم و حضور: نیرو اضافه شد، حضور امروز', ev(A, 'TST[S.today[0]][0]'), '· دستمزد روزانه', ev(A, 'S.team[0].w'));
+
+  ev(B, "openChat('c-support')");
+  await until(() => ev(B, "S.cur==='chat' && (S.convs.find(c=>c.id===S.cid)||{}).type==='support'"), 'support chat');
+  await ev(B, "LIVE.api('POST','/conversations/'+S.cid+'/messages',{kind:'text',body:'سلام، کد تأیید دیر می‌رسد'})");
+  log('گفت‌وگوی «پشتیبانی بلوک» باز شد و پیام کاربر به تیکت رفت');
+
+  ev(B, "go('learn')");
+  await until(() => ev(B, "S.cur==='learn' && COURSES[0] && COURSES[0][5]"), 'courses loaded');
+  ev(B, 'S.learn.p[0]=2;renderLearn()');
+  await until(async () => (await ev(B, "LIVE.api('GET','/app/courses')")).items[0].done === 2, 'course progress');
+  log('آکادمی: دوره‌ها از سرور و پیشرفت ذخیره شد ·', ev(B, 'COURSES[0][0]'));
+
+  const { saveConfig } = require('../src/lib/appConfig');
+  const uid = ev(A, 'LIVE.me.user.id');
+  await saveConfig('stories', [{ id: 'heat', t: 'ایمنی گرما', s: '۱۱ تا ۱۵ کار سنگین نکن', p: 'آب خنک و سایه لازم است', on: true }], uid);
+  await ev(B, 'LIVE.loadCfg()');
+  ev(B, 'openStory(0)');
+  await until(() => B.document.querySelector('#sv h2') && B.document.querySelector('#sv h2').textContent.includes('۱۱ تا ۱۵'), 'panel story shown');
+  ev(B, 'closeStory()');
+  ev(B, "openLegal('terms')");
+  log('استوری پنل در اپ نمایش داده شد · قوانین:', B.document.querySelector('#sb .sub').textContent);
+  ev(B, 'closeSheet()');
+  await saveConfig('stories', [], uid);
+
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));
   ev(A, 'logout()');

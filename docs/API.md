@@ -449,3 +449,72 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | PATCH / DELETE | `/admin/panel/guarantees/:id` | guar:2 | `{ status: accepted\|rejected }` |
 
 دسترسی مسیرهای قبلی: KYC و مدارک ← `kyc` · گزارش‌ها ← `reports` · کاربران و تعلیق ← `users` · حذف آگهی ← `ads` · ردپا ← `audit` · حل‌کننده‌ها ← `arbiters` · پرونده‌ها و تعیین حل‌کننده ← `disputes` · تأیید پرداخت و برگشت پول ← `pay`.
+
+---
+
+# فاز ۸ ب: پنل ادمین کامل، محتوای اپ، تیم و حضور، بازدید مهندس
+
+## تنظیمات قابل تغییر از پنل (`app_config`)
+هر کلید یک JSON است؛ سرور در حافظه نگه می‌دارد و پیش‌فرض‌ها در `src/lib/appConfig.ts` است.
+
+| کلید | بخش پنل (دسترسی ویرایش) | اثر در سرور |
+|---|---|---|
+| `settings` | settings | `flags.maintenance` ← همهٔ مسیرهای اپ `503 MAINTENANCE` (جز auth/app/meta/admin/events) · `flags.arbitration=false` ← `FEATURE_OFF` · `flags.foreign=false` ← `FOREIGN_DISABLED` · `flags.autoFlag=false` ← پیام‌ها علامت نمی‌خورند. روشن کردن حالت تعمیر فقط با مدیر ارشد |
+| `coefs` | coefs | `arb`: پایه، کمیسیون ساده/پیچیده، مرز پیچیدگی، رفت‌وآمد، ضرایب مبلغ و حوزه، مهلت گفت‌وگو و اعتراض، شرط سابقه و امتیاز حل‌کننده ← فرمول هزینهٔ داوری · `est`، `tools` برای اپ |
+| `legal` | legal | متن قوانین استفاده، حریم خصوصی، قوانین جامعه (نسخه و تاریخ) |
+| `stories` | stories | استوری‌های بالای خانهٔ اپ |
+| `courses` | academy | دوره‌های آکادمی (`roles` خالی = همه، `st: published\|draft`) |
+| `catalog` | catalog | `roles.<نقش>.on=false` ← ثبت‌نام آن نقش `ROLE_DISABLED` · `custom` تصمیم «+ مورد دیگر» · `panel` فهرست‌های نمایشی پنل |
+| `visitTypes` | coefs | انواع بازدید مهندس و قیمت |
+| `notifTemplates`، `boost` | notif، pay | فقط ذخیره (اعلان خودکار قابل تنظیم و ارتقای پولی آگهی هنوز در سرور نیست) |
+
+## اپ: `/api/app`
+| متد | مسیر | توضیح |
+|---|---|---|
+| GET | `/app/config` | `{ flags, ver, display, legal, stories (فقط روشن‌ها), coefs, visitTypes, roles }` — مهمان هم |
+| POST | `/app/stories/:id/view` | شمارش بازدید استوری |
+| GET | `/app/courses` | دوره‌های منتشرشده + `done` کاربر (اگر وارد شده) + `badges` |
+| PUT | `/app/courses/:id/progress` | `{ done }` — عقب نمی‌رود؛ با تمام شدن درس‌ها `completed` |
+| POST | `/app/support` | 🔒 نقش — گفت‌وگوی «پشتیبانی بلوک» (یکی برای هر کاربر). پیام‌ها با همان `/conversations/:id/messages`؛ پیام کاربر تیکت را `open` می‌کند |
+
+پیام مدیر در گفت‌وگوها: `kind: text`، `mine: false`، `admin: "نام مدیر"`. پیام پنهان‌شده توسط مدیر برای کاربران `kind: del`. گفت‌وگوی قفل‌شده: `403 CONV_LOCKED` (در `GET .../messages` هم `conversation.locked`).
+
+## پنل ادمین — بخش ب (`/api/admin/panel`)
+تصویر لحظه‌ای (`/snapshot`) این بخش‌ها را هم دارد (هر کدام با دسترسی مشاهده): `conversations` (chats)، `tickets` (support، با پیام‌ها و کد `T-xxxx`)، `broadcasts` (notif، با `opened`)، `config` (همه؛ `values` و `stored`)، `content` (بازدید استوری/دوره و تعداد تمام‌شده)، `custom` (catalog، «+ مورد دیگر» با تعداد)، `qa`، `tx` (pay: پرداخت‌های ثبت‌شده، هزینه و کمیسیون داوری، برگشت، آزادسازی، تسویه)، `status`، `sessions` (admins). حل‌کننده‌ها `earned` (آزادشده)، `paidOut` و `pending` دارند.
+
+| متد | مسیر | دسترسی | توضیح |
+|---|---|---|---|
+| GET | `/conversations/:id` | chats | همهٔ پیام‌ها (پنهان‌شده و علامت‌خورده هم) با لینک امضاشدهٔ فایل |
+| POST | `/conversations/:id/messages` | chats:2 | `{ text }` پیام «پشتیبانی بلوک» که هر دو طرف می‌بینند |
+| PATCH | `/conversations/:id` | chats:2 | `{ locked }` + پیام سیستمی |
+| PATCH | `/messages/:id` | chats:2 | `{ hidden?, flagged? }` |
+| POST | `/users/:id/warn` | chats:2 | `{ text, report? }` اعلان اخطار (+ ثبت در گزارش‌ها) |
+| PATCH | `/tickets/:id` | support:2 | `{ status?, priority?, category?, assigneeAdminId? }` — بستن، پیام سیستمی می‌فرستد |
+| POST | `/tickets/:id/reply` | support:2 | `{ text }` ← تیکت `pending`، مسئول پیش‌فرض خود مدیر، اعلان به کاربر |
+| POST | `/broadcasts/preview` | notif | `{ roles[], provinces[], userIds[] }` ← `{ count }` (با محدودهٔ استان مدیر) |
+| POST | `/broadcasts` | notif:2 | همان + `{ title, body?, screen?, targetText? }` ← اعلان داخل اپ و SSE برای همه |
+| PUT | `/config/:key` | بسته به کلید (جدول بالا) | `{ value, note? }` — نامعتبر: `BAD_CONFIG` |
+| POST | `/catalog/custom` | catalog:2 | `{ role, field, value, action: ok\|rej\|merge, to? }` — ok به گزینه‌های فرم اپ اضافه می‌شود؛ merge مقدار را در پروفایل‌ها جایگزین می‌کند |
+| POST | `/payouts` | pay:2 | `{ arbiterId, amount, ref }` تسویهٔ دستی (بیش از مانده: `OVER_BALANCE`) |
+| GET | `/status` | status | متریک‌های سرور، دیتابیس، پیامک، ذخیرهٔ فایل |
+| DELETE | `/sessions/:id` | admins:2 | بستن نشست مدیر |
+| POST | `/roles` | admins:2 | `{ name, color? }` نقش تازه (فقط داشبورد) |
+
+## تیم و حضور و غیاب: `/api/me/team` 🔒 نقش فعال
+| متد | مسیر | توضیح |
+|---|---|---|
+| GET | `/me/team?from=YYYY-MM-DD&days=7` | نیروها با `days: { 'YYYY-MM-DD': 'p'\|'a'\|'l' }`، `present`، `pay` و `totals` (پیش‌فرض ۷ روز تا امروز، وقت تهران) |
+| POST | `/me/team` | `{ name, skill, dailyWage, profileCode? }` |
+| PATCH / DELETE | `/me/team/:id` | ویرایش (`active` هم) / حذف |
+| PUT | `/me/team/:id/attendance` | `{ day?, status: p\|a\|l\|null }` — روز آینده: `FUTURE_DAY` |
+| POST | `/me/team/attendance/all-present` | همه امروز حاضر |
+
+## رزرو بازدید مهندس: `/api/visits`
+| متد | مسیر | توضیح |
+|---|---|---|
+| GET | `/visits/slots/:code?days=7` | روزهای پیش رو از فردا: `{ day, label, weekday, open (هفتهٔ مهندس), taken[] }`، `slots` (۸:۰۰، ۱۰:۰۰، ۱۲:۰۰، ۱۶:۰۰)، `types` |
+| GET | `/visits` | 🔒 بازدیدهای من (هر دو طرف) با `as: client\|engineer` |
+| POST | `/visits` | 🔒 نقش — `{ engineerCode, type (شمارهٔ نوع), day, slot, address, note? }` ← `requested` · خطاها: `DAY_CLOSED`، `SLOT_TAKEN`، `BAD_DAY` (فقط تا ۱۴ روز) |
+| POST | `/visits/:id/confirm` · `/decline` | 🔒 مهندس (`{ reason? }`) |
+| POST | `/visits/:id/cancel` | 🔒 درخواست‌دهنده؛ بازدید تأییدشده کمتر از ۱۲ ساعت مانده: `LATE_CANCEL` |
+| POST | `/visits/:id/done` | 🔒 مهندس، از روز بازدید به بعد: `{ checklist: [{item, ok}], report }` |

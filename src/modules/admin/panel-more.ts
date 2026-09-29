@@ -522,11 +522,11 @@ async function txSection(a: AdminCtx) {
       .orderBy(desc(arbiterPayouts.createdAt))
       .limit(300),
   ]);
-  const out: { id: string; kind: string; label: string; userId: string | null; amount: number; at: Date; status: 'ok' | 'pending' | 'fail'; ref: string | null; projectId: string | null }[] = [];
+  const out: { id: string; kind: string; label: string; userId: string | null; amount: number; at: Date; status: 'ok' | 'pending' | 'fail'; ref: string | null; projectId: string | null; commission?: number }[] = [];
   for (const { p, userId } of pays)
     out.push({ id: p.id, kind: 'direct', label: 'پرداخت ثبت‌شده · ' + p.label, userId, amount: p.amount, at: p.createdAt, status: p.status === 'confirmed' ? 'ok' : p.status === 'disputed' ? 'fail' : 'pending', ref: p.paidOn, projectId: p.projectId });
   for (const { c, userId, projectId } of cases) {
-    out.push({ id: c.id + ':p', kind: 'arb', label: 'هزینهٔ داوری (امانی)', userId, amount: c.total, at: c.paidAt ?? c.updatedAt, status: 'ok', ref: c.paymentRef, projectId });
+    out.push({ id: c.id + ':p', kind: 'arb', label: 'هزینهٔ داوری (امانی)', userId, amount: c.total, at: c.paidAt ?? c.updatedAt, status: 'ok', ref: c.paymentRef, projectId, commission: c.paymentStatus === 'refunded' ? 0 : c.commission });
     if (c.paymentStatus === 'refunded') out.push({ id: c.id + ':r', kind: 'refund', label: 'بازگشت هزینهٔ داوری', userId, amount: c.total, at: c.refundedAt ?? c.updatedAt, status: 'ok', ref: c.refundReason, projectId });
     if (c.paymentStatus === 'released') out.push({ id: c.id + ':s', kind: 'release', label: 'آزاد شدن سهم حل‌کننده', userId: null, amount: c.arbiterShare, at: c.releasedAt ?? c.updatedAt, status: 'ok', ref: null, projectId });
   }
