@@ -26,7 +26,7 @@ Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · *
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
 npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
-npm test               # ۶۰ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm test               # ۶۱ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env

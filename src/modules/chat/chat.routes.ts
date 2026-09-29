@@ -75,7 +75,7 @@ r.post(
   }),
 );
 
-/** پیوست: عکس (JPG/PNG/WebP) یا PDF در فیلد «file»، توضیح اختیاری در «caption» — multipart/form-data */
+/** پیوست: عکس (JPG/PNG/WebP)، PDF یا پیام صوتی (WebM/Ogg/M4A، مدت در «duration» ثانیه) در فیلد «file»، توضیح اختیاری در «caption» — multipart/form-data */
 r.post(
   '/:id/attachments',
   requireAuth,
@@ -83,9 +83,9 @@ r.post(
   singleFile,
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
-    const { caption } = parse(z.object({ caption: z.string().trim().max(1000).optional() }), req.body);
+    const { caption, duration } = parse(z.object({ caption: z.string().trim().max(1000).optional(), duration: z.coerce.number().int().min(0).max(600).optional() }), req.body);
     const { me } = await svc.membership(req.user!.id, id);
-    const msg = await svc.sendAttachment(req.user!.id, id, req.file!, caption);
+    const msg = await svc.sendAttachment(req.user!.id, id, req.file!, caption, duration);
     res.status(201).json({ message: shapeMessage(msg, me.id) });
   }),
 );

@@ -142,7 +142,7 @@ export async function postMessage(conv: Conversation, sender: Pick<Profile, 'id'
 /** پیوست چت خصوصی است؛ لینک امضاشده فقط هنگام نمایش به اعضای گفت‌وگو ساخته می‌شود */
 function withFileUrl(m: Message) {
   const fileId = m.payload?.fileId;
-  if ((m.kind !== 'photo' && m.kind !== 'file') || typeof fileId !== 'string') return m.payload;
+  if ((m.kind !== 'photo' && m.kind !== 'file' && m.kind !== 'voice') || typeof fileId !== 'string') return m.payload;
   return { ...m.payload, url: fileUrl({ id: fileId, isPublic: false }) };
 }
 
@@ -199,6 +199,7 @@ export async function sendAttachment(
   conversationId: string,
   file: { buffer: Buffer; originalname?: string },
   caption?: string,
+  duration?: number,
 ) {
   const { conv, me, other } = await membership(userId, conversationId);
   assertOpen(conv);
@@ -206,9 +207,9 @@ export async function sendAttachment(
   const f = await saveUpload(userId, 'chat', file, { conversationId });
   try {
     return await postMessage(conv, me, {
-      kind: f.mime === 'application/pdf' ? 'file' : 'photo',
+      kind: f.mime === 'application/pdf' ? 'file' : f.mime.startsWith('audio/') ? 'voice' : 'photo',
       body: caption || null,
-      payload: { fileId: f.id, mime: f.mime, size: f.size, name: f.originalName },
+      payload: { fileId: f.id, mime: f.mime, size: f.size, name: f.originalName, ...(f.mime.startsWith('audio/') ? { dur: duration ?? 0 } : {}) },
     });
   } catch (e) {
     await purgeFiles([f.id]);
@@ -399,7 +400,7 @@ export async function deleteMessage(userId: string, messageId: string) {
   if (!m) throw notFound('پیام پیدا نشد');
   const { me } = await membership(userId, m.conversationId);
   if (m.senderProfileId !== me.id) throw forbidden('فقط پیام‌های خودت را می‌توانی حذف کنی', 'NOT_OWNER');
-  if (!['text', 'loc', 'phone', 'photo', 'file'].includes(m.kind)) throw badRequest('پیشنهاد و پیام سیستمی حذف نمی‌شود؛ پیشنهاد را لغو کن', 'NOT_DELETABLE');
+  if (!['text', 'loc', 'phone', 'photo', 'file', 'voice'].includes(m.kind)) throw badRequest('پیشنهاد و پیام سیستمی حذف نمی‌شود؛ پیشنهاد را لغو کن', 'NOT_DELETABLE');
   if (Date.now() - m.createdAt.getTime() > 24 * 3600_000) throw badRequest('فقط تا ۲۴ ساعت بعد از ارسال می‌شود حذف کرد', 'TOO_OLD');
   await db.update(messages).set({ kind: 'del', body: null, payload: null, flagged: false }).where(eq(messages.id, messageId));
   if (typeof m.payload?.fileId === 'string') await purgeFiles([m.payload.fileId]);

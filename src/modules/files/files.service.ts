@@ -13,12 +13,14 @@ export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
 const MB = 1024 * 1024;
 export const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+// پیام صوتی چت: اندروید/کروم WebM یا Ogg (Opus)، آیفون M4A
+export const AUDIO_MIMES = ['audio/webm', 'audio/ogg', 'audio/mp4'] as const;
 
 const RULES: Record<FilePurpose, { mimes: readonly string[]; maxBytes: number; isPublic: boolean }> = {
   avatar: { mimes: IMAGE_MIMES, maxBytes: 5 * MB, isPublic: true },
   portfolio: { mimes: IMAGE_MIMES, maxBytes: 5 * MB, isPublic: true },
   document: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
-  chat: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
+  chat: { mimes: [...IMAGE_MIMES, 'application/pdf', ...AUDIO_MIMES], maxBytes: 10 * MB, isPublic: false },
   // کارت ملی و سلفی — فقط برای بررسی ادمین، بعد از بررسی پاک می‌شوند
   kyc: { mimes: IMAGE_MIMES, maxBytes: 8 * MB, isPublic: false },
   // فایل پروژه و عکس گزارش روزانه — فقط دو طرف پروژه
@@ -28,13 +30,16 @@ const RULES: Record<FilePurpose, { mimes: readonly string[]; maxBytes: number; i
 };
 export const MAX_UPLOAD_BYTES = 10 * MB;
 
-const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
+const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a' };
 
 export function sniffMime(b: Buffer): string | null {
   if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
   if (b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
   if (b.length >= 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
   if (b.length >= 5 && b.toString('latin1', 0, 5) === '%PDF-') return 'application/pdf';
+  if (b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return 'audio/webm';
+  if (b.length >= 4 && b.toString('latin1', 0, 4) === 'OggS') return 'audio/ogg';
+  if (b.length >= 12 && b.toString('latin1', 4, 8) === 'ftyp') return 'audio/mp4';
   return null;
 }
 
@@ -79,7 +84,7 @@ export async function saveUpload(
   const mime = sniffMime(file.buffer);
   if (!mime || !rule.mimes.includes(mime)) {
     throw badRequest(
-      rule.mimes.includes('application/pdf') ? 'فقط عکس (JPG، PNG، WebP) یا PDF قبول است' : 'فقط عکس (JPG، PNG، WebP) قبول است',
+      rule.mimes.includes('audio/webm') ? 'فقط عکس، PDF یا پیام صوتی قبول است' : rule.mimes.includes('application/pdf') ? 'فقط عکس (JPG، PNG، WebP) یا PDF قبول است' : 'فقط عکس (JPG، PNG، WebP) قبول است',
       'FILE_TYPE',
     );
   }
