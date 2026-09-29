@@ -16,6 +16,7 @@ import {
 import { workCode } from '../../lib/crypto';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizeFa } from '../../lib/text';
+import { cfg, flag } from '../../lib/appConfig';
 import { privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
 import { validateRoleData, type RoleData } from '../roles/validate';
 import { publicFileUrl, purgeFiles } from '../files/files.service';
@@ -105,8 +106,11 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData)
     .where(and(eq(profiles.userId, user.id), eq(profiles.role, role)))
     .limit(1);
   if (exists) throw conflict('این نقش را قبلاً ثبت کرده‌اید', 'ROLE_EXISTS');
+  // مدیر می‌تواند ثبت‌نام یک نقش یا اتباع خارجی را موقتاً ببندد (پنل ← فهرست‌ها / تنظیمات)
+  if (cfg('catalog').roles?.[role]?.on === false) throw forbidden('ثبت‌نام این نقش فعلاً بسته است', 'ROLE_DISABLED');
 
   const d = validateRoleData(role, input);
+  if (!flag('foreign') && d.nat && d.nat !== 'ایرانی') throw forbidden('ثبت‌نام اتباع خارجی فعلاً بسته است', 'FOREIGN_DISABLED');
 
   // نام واقعی: بار اول از فرم گرفته می‌شود؛ بعد از احراز هویت قفل است
   let firstName = user.firstName;

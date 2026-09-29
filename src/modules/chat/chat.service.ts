@@ -7,6 +7,7 @@ import {
   messages,
   profiles,
   projects,
+  supportTickets,
   users,
   type DayPayload,
   type DealPayload,
@@ -15,6 +16,7 @@ import {
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
 import { isSuspicious } from '../../lib/flag';
+import { flag } from '../../lib/appConfig';
 import { blockedIds } from '../profiles/profiles.service';
 import { notify } from '../notifications/notify';
 import { fileUrl, publicFileUrl, purgeFiles, saveUpload } from '../files/files.service';
@@ -92,7 +94,7 @@ type NewMessage = {
 
 /** ثبت پیام + به‌روزرسانی شمارندهٔ خوانده‌نشده + ارسال رویداد لحظه‌ای */
 export async function postMessage(conv: Conversation, sender: Pick<Profile, 'id'> | null, m: NewMessage, exec: Exec = db) {
-  const flagged = ['text', 'photo', 'file'].includes(m.kind) && !!m.body && isSuspicious(m.body);
+  const flagged = flag('autoFlag') && ['text', 'photo', 'file'].includes(m.kind) && !!m.body && isSuspicious(m.body);
   const [msg] = await exec
     .insert(messages)
     .values({
@@ -107,6 +109,17 @@ export async function postMessage(conv: Conversation, sender: Pick<Profile, 'id'
     })
     .returning();
   await exec.update(conversations).set({ lastMessageAt: msg.createdAt }).where(eq(conversations.id, conv.id));
+  // گفت‌وگوی پشتیبانی: پیام کاربر تیکت را باز می‌کند (پاسخ مدیر را پنل ادمین ثبت می‌کند)
+  if (conv.kind === 'support' && sender) {
+    await exec
+      .update(supportTickets)
+      .set({
+        status: 'open',
+        updatedAt: new Date(),
+        subject: sql`coalesce(${supportTickets.subject}, ${(m.body ?? '').slice(0, 160) || null})`,
+      })
+      .where(eq(supportTickets.conversationId, conv.id));
+  }
   // گفت‌وگوی پنهان‌شده با پیام تازه دوباره ظاهر می‌شود
   await exec
     .update(conversationMembers)
@@ -134,6 +147,9 @@ function withFileUrl(m: Message) {
 }
 
 export function shapeMessage(m: Message, viewerProfileId: string) {
+  // پیام پنهان‌شده توسط مدیر: کاربران فقط جای خالی می‌بینند
+  if (m.hiddenAt) m = { ...m, kind: 'del', body: null, payload: { hiddenByAdmin: true }, flagged: false };
+  const admin = m.senderProfileId === null && typeof m.payload?.admin === 'string' ? m.payload.admin : null;
   return {
     id: m.id,
     kind: m.kind,
@@ -142,10 +158,17 @@ export function shapeMessage(m: Message, viewerProfileId: string) {
     status: m.status,
     flagged: m.flagged && m.senderProfileId !== viewerProfileId,
     mine: m.senderProfileId === viewerProfileId,
-    system: m.senderProfileId === null,
+    system: m.senderProfileId === null && !admin,
+    // پیام پشتیبانی بلوک (مدیر) با نام فرستنده
+    admin,
     projectId: m.projectId,
     createdAt: m.createdAt,
   };
+}
+
+/** مدیر می‌تواند گفت‌وگو را قفل کند (مثلاً هنگام بررسی کلاهبرداری) */
+function assertOpen(conv: Conversation) {
+  if (conv.lockedAt) throw forbidden('این گفت‌وگو توسط پشتیبانی بلوک قفل شده است', 'CONV_LOCKED');
 }
 
 async function assertNotBlocked(userId: string, otherUserId?: string) {
@@ -160,6 +183,7 @@ export async function sendMessage(
   input: { kind: 'text' | 'loc' | 'phone'; body?: string; payload?: Record<string, unknown> },
 ) {
   const { conv, me, other } = await membership(userId, conversationId);
+  assertOpen(conv);
   await assertNotBlocked(userId, other?.p.userId);
   if (input.kind === 'phone') {
     // شمارهٔ خود فرستنده از حسابش برداشته می‌شود، نه از ورودی
@@ -177,6 +201,7 @@ export async function sendAttachment(
   caption?: string,
 ) {
   const { conv, me, other } = await membership(userId, conversationId);
+  assertOpen(conv);
   await assertNotBlocked(userId, other?.p.userId);
   const f = await saveUpload(userId, 'chat', file, { conversationId });
   try {
@@ -224,6 +249,7 @@ export async function listMessages(userId: string, conversationId: string, q: { 
       stage: conv.stage,
       adId: conv.adId,
       projectId: conv.projectId,
+      locked: !!conv.lockedAt,
       muted: member.muted,
       archived: member.archived,
       pinned: member.pinned,
@@ -396,6 +422,7 @@ async function cancelPending(conversationId: string, kind: 'deal' | 'day', exec:
 export async function proposeDeal(userId: string, conversationId: string, d: DealPayload) {
   const { conv, me, other } = await membership(userId, conversationId);
   if (!other) throw badRequest('طرف مقابل در این گفت‌وگو نیست');
+  assertOpen(conv);
   await assertNotBlocked(userId, other.p.userId);
   if (conv.projectId) {
     const [p] = await db.select({ status: projects.status }).from(projects).where(eq(projects.id, conv.projectId)).limit(1);
@@ -420,6 +447,7 @@ export async function proposeDeal(userId: string, conversationId: string, d: Dea
 export async function proposeDay(userId: string, conversationId: string, d: DayPayload) {
   const { conv, me, other } = await membership(userId, conversationId);
   if (!other) throw badRequest('طرف مقابل در این گفت‌وگو نیست');
+  assertOpen(conv);
   await assertNotBlocked(userId, other.p.userId);
   const msg = await db.transaction(async (tx) => {
     await cancelPending(conversationId, 'day', tx);
@@ -521,4 +549,24 @@ export async function answerProposal(userId: string, messageId: string, status: 
   });
   if (result.project) emitTo([userId, other.p.userId], { type: 'project', data: { project: result.project } });
   return result;
+}
+
+/* ---------- گفت‌وگوی پشتیبانی ---------- */
+
+/** گفت‌وگوی «پشتیبانی بلوک» کاربر (یکی برای هر کاربر، با پروفایل نقش فعال) + تیکت آن */
+export async function supportConversation(me: Profile) {
+  const [found] = await db
+    .select({ c: conversations })
+    .from(supportTickets)
+    .innerJoin(conversations, eq(conversations.id, supportTickets.conversationId))
+    .where(eq(supportTickets.userId, me.userId))
+    .limit(1);
+  if (found) return found.c;
+  return db.transaction(async (tx) => {
+    const [conv] = await tx.insert(conversations).values({ kind: 'support', title: 'پشتیبانی بلوک', stage: 0 }).returning();
+    await tx.insert(conversationMembers).values({ conversationId: conv.id, profileId: me.id, userId: me.userId });
+    await tx.insert(supportTickets).values({ conversationId: conv.id, userId: me.userId, status: 'closed' });
+    await postMessage(conv, null, { kind: 'sys', body: 'اینجا فضای امن گفت‌وگو با پشتیبانی بلوک است. مشکلت را بنویس؛ کارشناس‌ها همین‌جا جواب می‌دهند.' }, tx);
+    return conv;
+  });
 }

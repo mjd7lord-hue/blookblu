@@ -3,6 +3,7 @@
  * یک تعریف، دو کاربرد: اعتبارسنجی سمت سرور + ارسال به اپ از مسیر /api/meta/roles
  */
 import type { Role } from '../../db/schema';
+import { cfg } from '../../lib/appConfig';
 
 export type FieldType = 'text' | 'area' | 'num' | 'chips' | 'multi' | 'toggle' | 'days' | 'prov' | 'city';
 
@@ -284,14 +285,28 @@ export const allFields = (role: Role) => REG[role].flatMap((s) => s.f);
 
 export const privateKeys = (role: Role) => new Set(allFields(role).filter((f) => f.private).map((f) => f.k));
 
+/** گزینه‌های «+ مورد دیگر» که مدیر در پنل پذیرفته (فهرست‌ها ← مورد دیگر) */
+export function acceptedExtras(role: Role, field: string) {
+  const pre = `${role}.${field}|`;
+  return Object.entries(cfg('catalog').custom ?? {})
+    .filter(([k, v]) => k.startsWith(pre) && v === 'ok')
+    .map(([k]) => k.slice(pre.length));
+}
+
 /** نسخهٔ قابل ارسال به اپ (بدون تابع show) */
 export function formsForClient() {
+  const cat = cfg('catalog').roles ?? {};
   return (Object.keys(REG) as Role[]).map((role) => ({
     role,
     ...ROLE_INFO[role],
+    // نقشی که مدیر ثبت‌نامش را بسته
+    enabled: cat[role]?.on !== false,
     steps: REG[role].map((s) => ({
       title: s.title,
-      fields: s.f.map(({ show, pattern, patternMsg, ...rest }) => ({ ...rest, conditional: !!show })),
+      fields: s.f.map(({ show, pattern, patternMsg, ...rest }) => {
+        const extra = rest.custom && rest.opts ? acceptedExtras(role, rest.k).filter((v) => !rest.opts!.includes(v)) : [];
+        return { ...rest, ...(extra.length ? { opts: [...rest.opts!, ...extra] } : {}), conditional: !!show };
+      }),
     })),
   }));
 }

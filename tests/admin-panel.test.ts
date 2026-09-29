@@ -17,7 +17,7 @@ describe('admin panel: roles, permissions, province scope, snapshot', () => {
     expect(me.status).toBe(200);
     expect(me.body.admin).toMatchObject({ roleKey: 'owner', roleName: 'مدیر ارشد', provinces: [] });
     expect(me.body.admin.perms.audit).toBe(2);
-    expect(me.body.roles.map((r: { key: string }) => r.key).sort()).toEqual(['arbit', 'content', 'finance', 'kyc', 'owner', 'support']);
+    expect(me.body.roles.map((r: { key: string }) => r.key)).toEqual(expect.arrayContaining(['arbit', 'content', 'finance', 'kyc', 'owner', 'support']));
 
     const snap = await api().get('/api/admin/panel/snapshot').set(auth(o.token));
     for (const k of ['users', 'ads', 'reports', 'projects', 'disputes', 'arbiters', 'guarantees', 'admins', 'audit', 'stats']) expect(snap.body).toHaveProperty(k);

@@ -8,6 +8,7 @@ import {
   integer,
   bigint,
   bigserial,
+  serial,
   date,
   smallint,
   timestamp,
@@ -293,6 +294,8 @@ export const notifications = pgTable(
     title: varchar('title', { length: 160 }).notNull(),
     body: text('body'),
     link: jsonb('link').$type<{ screen: string; id?: string }>(),
+    // اعلان همگانی پنل ادمین (برای درصد باز شدن)
+    broadcastId: uuid('broadcast_id'),
     readAt: ts('read_at'),
     createdAt: createdAt(),
   },
@@ -353,6 +356,8 @@ export const conversations = pgTable(
     title: varchar('title', { length: 160 }),
     stage: smallint('stage').notNull().default(0),
     lastMessageAt: ts('last_message_at').notNull().defaultNow(),
+    // قفل مدیر: پیام تازه پذیرفته نمی‌شود
+    lockedAt: ts('locked_at'),
     createdAt: createdAt(),
   },
   (t) => [index('conv_ad_idx').on(t.adId)],
@@ -408,6 +413,8 @@ export const messages = pgTable(
     status: proposalStatusEnum('status'),
     // پیام مشکوک (درخواست پیش‌پرداخت، شمارهٔ کارت)
     flagged: boolean('flagged').notNull().default(false),
+    // پنهان‌شده توسط مدیر: کاربران «پیام پنهان شد» می‌بینند، مدیر متن را
+    hiddenAt: ts('hidden_at'),
     projectId: uuid('project_id'),
     createdAt: createdAt(),
   },
@@ -920,4 +927,167 @@ export const admins = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('admins_role_idx').on(t.roleKey)],
+);
+
+/* ================= فاز ۸ ب: پنل ادمین — تنظیمات، پشتیبانی، اعلان همگانی، محتوا، تسویه ================= */
+
+// تنظیمات قابل تغییر از پنل (کلید → JSON): settings, coefs, catalog, legal, notifTemplates, boost, stories, courses
+export const appConfig = pgTable('app_config', {
+  key: varchar('key', { length: 40 }).primaryKey(),
+  value: jsonb('value').$type<unknown>().notNull(),
+  updatedBy: uuid('updated_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  updatedAt: updatedAt(),
+});
+
+export const ticketStatusEnum = pgEnum('ticket_status', ['open', 'pending', 'closed']);
+export const ticketPriorityEnum = pgEnum('ticket_priority', ['high', 'mid', 'low']);
+
+// تیکت پشتیبانی = گفت‌وگوی «پشتیبانی بلوک» هر کاربر (conversations.kind = support) + وضعیت و مسئول
+export const supportTickets = pgTable(
+  'support_tickets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    no: serial('no').notNull(), // شمارهٔ نمایشی T-1000+no
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .unique()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    subject: varchar('subject', { length: 160 }),
+    category: varchar('category', { length: 40 }).notNull().default('عمومی'),
+    priority: ticketPriorityEnum('priority').notNull().default('mid'),
+    status: ticketStatusEnum('status').notNull().default('open'),
+    assigneeAdminId: uuid('assignee_admin_id').references(() => admins.id, { onDelete: 'set null' }),
+    firstReplyAt: ts('first_reply_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('tickets_status_idx').on(t.status, t.updatedAt)],
+);
+
+export const broadcasts = pgTable('broadcasts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: varchar('title', { length: 160 }).notNull(),
+  body: text('body'),
+  link: jsonb('link').$type<{ screen: string; id?: string }>(),
+  target: jsonb('target').$type<{ roles: string[]; provinces: string[]; userIds: string[] }>().notNull(),
+  targetText: varchar('target_text', { length: 300 }).notNull(),
+  sent: integer('sent').notNull().default(0),
+  createdBy: uuid('created_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+});
+
+// شمارندهٔ بازدید استوری و دوره (محتوا خودش در app_config است)
+export const contentStats = pgTable(
+  'content_stats',
+  {
+    kind: varchar('kind', { length: 10 }).notNull(), // story | course
+    itemId: varchar('item_id', { length: 40 }).notNull(),
+    views: integer('views').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.itemId] })],
+);
+
+// پیشرفت کاربر در دوره‌های آکادمی (درس‌های تمام‌شده)
+export const courseProgress = pgTable(
+  'course_progress',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    courseId: varchar('course_id', { length: 40 }).notNull(),
+    done: smallint('done').notNull().default(0),
+    completedAt: ts('completed_at'),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.courseId] })],
+);
+
+// تسویهٔ دستی سهم حل‌کننده‌ها (تا درگاه بانکی)
+export const arbiterPayouts = pgTable('arbiter_payouts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  arbiterId: uuid('arbiter_id')
+    .notNull()
+    .references(() => arbiters.id, { onDelete: 'cascade' }),
+  amount: bigint('amount', { mode: 'number' }).notNull(),
+  ref: varchar('ref', { length: 120 }).notNull(),
+  adminUserId: uuid('admin_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+});
+
+/* ================= تیم و حضور و غیاب (پیمانکار/شرکت/متخصص با نیروهای خودش) ================= */
+
+export const attendanceEnum = pgEnum('attendance_status', ['p', 'a', 'l']); // حاضر، غایب، مرخصی
+
+export const crewMembers = pgTable(
+  'crew_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerProfileId: uuid('owner_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    // اگر نیرو خودش در بلوک پروفایل دارد
+    memberProfileId: uuid('member_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    name: varchar('name', { length: 80 }).notNull(),
+    skill: varchar('skill', { length: 60 }).notNull(),
+    dailyWage: bigint('daily_wage', { mode: 'number' }).notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index('crew_owner_idx').on(t.ownerProfileId)],
+);
+
+export const attendance = pgTable(
+  'attendance',
+  {
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => crewMembers.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    status: attendanceEnum('status').notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.memberId, t.day] })],
+);
+
+/* ================= رزرو بازدید مهندس ================= */
+
+export const visitStatusEnum = pgEnum('visit_status', ['requested', 'confirmed', 'declined', 'cancelled', 'done']);
+
+export const visits = pgTable(
+  'visits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientProfileId: uuid('client_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    engineerProfileId: uuid('engineer_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    typeName: varchar('type_name', { length: 80 }).notNull(),
+    duration: varchar('duration', { length: 30 }),
+    price: bigint('price', { mode: 'number' }).notNull(),
+    day: date('day').notNull(),
+    slot: varchar('slot', { length: 10 }).notNull(), // «۸:۰۰» همان‌طور که در اپ است
+    address: text('address').notNull(),
+    note: text('note'),
+    status: visitStatusEnum('status').notNull().default('requested'),
+    declineReason: text('decline_reason'),
+    // گزارش مهندس پس از بازدید
+    checklist: jsonb('checklist').$type<{ item: string; ok: boolean }[]>(),
+    report: text('report'),
+    doneAt: ts('done_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('visits_engineer_idx').on(t.engineerProfileId, t.day),
+    index('visits_client_idx').on(t.clientProfileId),
+    // یک ساعت از یک روز مهندس فقط یک رزرو فعال
+    uniqueIndex('visits_slot_uq')
+      .on(t.engineerProfileId, t.day, t.slot)
+      .where(sql`status in ('requested', 'confirmed')`),
+  ],
 );

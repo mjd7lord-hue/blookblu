@@ -1,3 +1,5 @@
+import { cfg } from '../../lib/appConfig';
+
 /**
  * هزینهٔ داوری حضوری — باید با فرانت (ARB_F، ARB_BASE، ARB_AMT، arbFee در index.html) یکی بماند.
  * هزینه = پایه × ضریب حوزه × ضریب مبلغ (گرد به ۱۰ هزار تومان) + رفت‌وآمد
@@ -15,28 +17,39 @@ export const ARB_FIELDS = {
 export type ArbField = keyof typeof ARB_FIELDS;
 export const ARB_FIELD_KEYS = Object.keys(ARB_FIELDS) as ArbField[];
 
-export const ARB_BASE = 1_200_000;
-export const ARB_TRAVEL = { city: 0, prov: 600_000, far: 2_000_000 } as const;
-export type TravelKind = keyof typeof ARB_TRAVEL;
-// [سقف مبلغ به میلیون تومان، ضریب، برچسب]
-export const ARB_AMOUNT_TIERS: [number, number, string][] = [
-  [50, 1, 'تا ۵۰ میلیون'],
-  [200, 1.6, '۵۰ تا ۲۰۰ میلیون'],
-  [1000, 2.6, '۲۰۰ میلیون تا ۱ میلیارد'],
-  [Infinity, 4, 'بیش از ۱ میلیارد'],
-];
+// ضرایب از تنظیمات پنل (بخش «ضرایب و فرمول‌ها»)؛ پیش‌فرض‌ها در lib/appConfig هم‌تراز با فرانت
+export type TravelKind = 'city' | 'prov' | 'far';
+const A = () => cfg('coefs').arb;
+export const arbBase = () => A().base;
+export const arbTravel = (): Record<TravelKind, number> => A().travel;
+export const fieldFactor = (f: ArbField) => A().fields[f] ?? ARB_FIELDS[f].factor;
+export const arbHours = () => ({ talk: A().talk, appeal: A().appeal });
+const faM = (n: number) => (n >= 1000 ? (n / 1000).toLocaleString('fa-IR') + ' میلیارد' : n.toLocaleString('fa-IR') + ' میلیون');
+/** [سقف مبلغ به میلیون تومان، ضریب، برچسب] — آخرین پله بی‌سقف */
+export function arbAmountTiers(): [number, number, string][] {
+  const t = [...A().amt].sort((a, b) => a[0] - b[0]);
+  return t.map(([max, k], i) => {
+    const last = i === t.length - 1;
+    const lo = i ? t[i - 1][0] : 0;
+    const label = last ? `بیش از ${faM(lo)}` : lo ? `${faM(lo).replace(' میلیون', '')} تا ${faM(max)}` : `تا ${faM(max)}`;
+    return [last ? Infinity : max, k, label];
+  });
+}
 
 // حوزه‌هایی که هر نقش می‌تواند داوری کند (فقط حوزه‌ای که مدرکش را دارد)
 export const fieldsForRole = (role: string) => ARB_FIELD_KEYS.filter((k) => ARB_FIELDS[k].who === role);
 
 export function arbFee(input: { field: ArbField; amountMillion: number; multi: boolean }, travelKind: TravelKind) {
   const F = ARB_FIELDS[input.field];
-  const tier = ARB_AMOUNT_TIERS.find((t) => input.amountMillion <= t[0])!;
-  const fee = Math.round((ARB_BASE * F.factor * tier[1]) / 10_000) * 10_000;
-  const complex = input.amountMillion > 200 || F.factor >= 1.4 || input.multi;
-  const commissionPct = complex ? 20 : 15;
+  const C = A();
+  const tiers = arbAmountTiers();
+  const tier = tiers.find((t) => input.amountMillion <= t[0]) ?? tiers[tiers.length - 1];
+  const fee = Math.round((C.base * fieldFactor(input.field) * tier[1]) / 10_000) * 10_000;
+  // پیچیده: مبلغ بالای مرز، حوزهٔ سازه، یا چند موضوع (هم‌تراز با پنل)
+  const complex = input.amountMillion > C.cplxAmt || input.field === 'struct' || input.multi;
+  const commissionPct = complex ? C.complex : C.simple;
   const commission = Math.round((fee * commissionPct) / 100 / 1000) * 1000;
-  const travel = ARB_TRAVEL[travelKind];
+  const travel = C.travel[travelKind] ?? 0;
   return {
     field: input.field,
     fieldName: F.name,

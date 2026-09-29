@@ -39,6 +39,7 @@ import { notify } from '../notifications/notify';
 import { trustOf } from '../profiles/profiles.service';
 import { adminLog } from './admin.service';
 import { ARB_FIELDS, type ArbField } from '../arbitration/fees';
+import { arbiterBalances, moreSections } from './panel-more';
 
 const r = Router();
 r.use(requireAdmin);
@@ -235,11 +236,11 @@ async function arbitersSection(a: AdminCtx) {
     .innerJoin(profiles, eq(profiles.id, arbiters.profileId))
     .where(scoped(a, profiles.province))
     .orderBy(desc(arbiters.createdAt));
-  const earn = await db
-    .select({ id: arbitrationCases.arbiterId, released: sql<number>`coalesce(sum(${arbitrationCases.arbiterShare}) filter (where ${arbitrationCases.paymentStatus} = 'released'), 0)::bigint` })
-    .from(arbitrationCases)
-    .groupBy(arbitrationCases.arbiterId);
-  return rows.map(({ a: x, ...p }) => ({ ...x, ...p, docUrl: signed(x.docFileId), earned: Number(earn.find((e) => e.id === x.id)?.released ?? 0) }));
+  const bal = await arbiterBalances();
+  return rows.map(({ a: x, ...p }) => {
+    const b = bal.get(x.id) ?? { released: 0, paidOut: 0, pending: 0 };
+    return { ...x, ...p, docUrl: signed(x.docFileId), earned: b.released, paidOut: b.paidOut, pending: b.pending };
+  });
 }
 
 async function guarSection(a: AdminCtx) {
@@ -333,8 +334,8 @@ r.get(
     const a = req.admin!;
     const out: Record<string, unknown> = { at: new Date() };
     const jobs: Promise<void>[] = [];
-    const add = (key: string, m: AdminModule, fn: () => Promise<unknown>) => {
-      if (can(a, m)) jobs.push(fn().then((v) => void (out[key] = v)));
+    const add = (key: string, m: AdminModule | null, fn: () => Promise<unknown>) => {
+      if (!m || can(a, m)) jobs.push(fn().then((v) => void (out[key] = v)));
     };
     // کاربران برای نام‌ها در همهٔ بخش‌ها لازم است؛ مدارک و کد ملی فقط با دسترسی احراز
     if (can(a, 'users') || can(a, 'kyc')) jobs.push(usersSection(a, can(a, 'kyc')).then((v) => void (out.users = v)));
@@ -347,6 +348,7 @@ r.get(
     add('admins', 'admins', () => adminsSection());
     add('audit', 'audit', () => auditSection());
     add('stats', 'dash', () => statsSection(a));
+    moreSections(a, add);
     await Promise.all(jobs);
     res.json(out);
   }),
@@ -373,6 +375,19 @@ r.patch(
       .returning();
     await adminLog(db, req.user!, 'role.update', 'admin_role', '00000000-0000-0000-0000-000000000000', `${role.name}: ${JSON.stringify(body.perms ?? {})}`);
     res.json({ role: nr });
+  }),
+);
+
+r.post(
+  '/roles',
+  perm('admins', 2),
+  ah(async (req, res) => {
+    const body = parse(z.object({ name: z.string().trim().min(2).max(40), color: z.string().max(12).default('#34D399') }), req.body);
+    const perms = Object.fromEntries(ADMIN_MODULES.map((m) => [m, m === 'dash' ? 1 : 0])) as AdminPerms;
+    const key = 'r' + Date.now().toString(36);
+    const [role] = await db.insert(adminRoles).values({ key, name: body.name, color: body.color, perms }).returning();
+    await adminLog(db, req.user!, 'role.create', 'admin_role', '00000000-0000-0000-0000-000000000000', body.name);
+    res.status(201).json({ role });
   }),
 );
 

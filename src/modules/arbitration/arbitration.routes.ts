@@ -7,7 +7,8 @@ import { ah, parse, uuidParam } from '../../lib/http';
 import { toLatinDigits } from '../../lib/text';
 import { perm, requireAdmin, requireAuth, requireProfile } from '../../middlewares/auth';
 import { photosUpload, singleFile, uploadLimiter } from '../files/upload';
-import { ARB_AMOUNT_TIERS, ARB_BASE, ARB_FIELD_KEYS, ARB_FIELDS, ARB_TRAVEL, type ArbField } from './fees';
+import { ARB_FIELD_KEYS, ARB_FIELDS, arbAmountTiers, arbBase, arbHours, arbTravel, fieldFactor, type ArbField } from './fees';
+import { cfg } from '../../lib/appConfig';
 import * as svc from './arbitration.service';
 
 const fieldEnum = z.enum(ARB_FIELD_KEYS as [ArbField, ...ArbField[]], { errorMap: () => ({ message: 'حوزهٔ مشکل را انتخاب کن' }) });
@@ -47,13 +48,13 @@ disputesRouter.get('/meta', (_req, res) => {
     reasons: svc.DISPUTE_REASONS,
     asks: svc.DISPUTE_ASKS,
     stages: svc.STAGES,
-    fields: ARB_FIELD_KEYS.map((k) => ({ key: k, ...ARB_FIELDS[k] })),
-    base: ARB_BASE,
-    travel: ARB_TRAVEL,
-    amountTiers: ARB_AMOUNT_TIERS.map(([max, factor, label]) => ({ maxMillion: Number.isFinite(max) ? max : null, factor, label })),
-    commission: { simplePct: 15, complexPct: 20 },
-    talkHours: 48,
-    appealHours: 72,
+    fields: ARB_FIELD_KEYS.map((k) => ({ key: k, ...ARB_FIELDS[k], factor: fieldFactor(k) })),
+    base: arbBase(),
+    travel: arbTravel(),
+    amountTiers: arbAmountTiers().map(([max, factor, label]) => ({ maxMillion: Number.isFinite(max) ? max : null, factor, label })),
+    commission: { simplePct: cfg('coefs').arb.simple, complexPct: cfg('coefs').arb.complex, complexAboveMillion: cfg('coefs').arb.cplxAmt },
+    talkHours: arbHours().talk,
+    appealHours: arbHours().appeal,
   });
 });
 

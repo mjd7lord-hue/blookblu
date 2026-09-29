@@ -24,10 +24,16 @@ import mediaRoutes from './modules/files/media.routes';
 import kycRoutes from './modules/kyc/kyc.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import adminPanelRoutes from './modules/admin/panel';
+import { panelMoreRoutes } from './modules/admin/panel-more';
 import { contractPrintRouter, projectContractRouter } from './modules/contracts/contract.routes';
 import { paymentsRouter, projectPaymentsRouter } from './modules/projects/payments';
 import { projectStatementsRouter, statementsRouter } from './modules/projects/statements';
 import { dailyRouter, projectDailyRouter, projectFilesRouter } from './modules/projects/worksite';
+import appContentRoutes from './modules/content/content.routes';
+import teamRoutes from './modules/team/team.routes';
+import visitRoutes from './modules/visits/visits.routes';
+import { cfg, configReady } from './lib/appConfig';
+import { countRequests } from './lib/metrics';
 import { adminArbitrationRouter, arbiterRouter, disputesRouter, projectDisputesRouter } from './modules/arbitration/arbitration.routes';
 
 export function createApp() {
@@ -45,7 +51,8 @@ export function createApp() {
       origin: env.CORS_ORIGINS === '*' ? true : env.CORS_ORIGINS.split(',').map((s) => s.trim()),
     }),
   );
-  app.use(express.json({ limit: '100kb' }));
+  app.use(express.json({ limit: '400kb' }));
+  app.use(countRequests);
   if (env.NODE_ENV !== 'test') app.use(pinoHttp({ logger }));
 
   app.get('/api/health', async (_req, res) => {
@@ -57,11 +64,21 @@ export function createApp() {
     }
   });
 
+  // تنظیمات پنل (app_config) پیش از اولین درخواست خوانده می‌شود
+  app.use(configReady);
+  // حالت تعمیر (پنل ← تنظیمات): اپ فقط پیام «در حال به‌روزرسانی» می‌گیرد؛ ورود، پنل ادمین و تنظیمات باز است
+  app.use((req, res, next) => {
+    if (cfg('settings').flags.maintenance !== true || /^\/api\/(health|app|meta|auth|admin|events)(\/|$)/.test(req.path)) return next();
+    res.status(503).json({ error: { code: 'MAINTENANCE', message: 'بلوک در حال به‌روزرسانی است؛ کمی بعد دوباره سر بزن' } });
+  });
+
   app.use('/api/meta', metaRoutes);
+  app.use('/api/app', appContentRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/me', meRoutes);
   app.use('/api/me', mediaRoutes);
   app.use('/api/me', kycRoutes);
+  app.use('/api/me/team', teamRoutes);
   app.use('/api/files', fileRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/profiles', profileRoutes);
@@ -88,6 +105,8 @@ export function createApp() {
   app.use('/api/admin/arbitration', adminArbitrationRouter);
   // فاز ۸: پنل ادمین (نقش‌ها، مدیران، تصویر لحظه‌ای)
   app.use('/api/admin/panel', adminPanelRoutes);
+  app.use('/api/admin/panel', panelMoreRoutes);
+  app.use('/api/visits', visitRoutes);
   app.use('/api/events', eventsRoutes);
   app.use('/api/guarantees', guaranteesRouter);
   app.use('/api/notifications', notificationRoutes);

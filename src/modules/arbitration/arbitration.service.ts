@@ -19,7 +19,8 @@ import { notify } from '../notifications/notify';
 import { faNum } from '../contracts/contract.service';
 import { projectFor, projectSysMessage } from '../projects/access';
 import { adminLog } from '../admin/admin.service';
-import { ARB_FIELDS, appealFee, arbFee, fieldsForRole, type ArbField, type TravelKind } from './fees';
+import { ARB_FIELDS, appealFee, arbFee, arbHours, fieldsForRole, type ArbField, type TravelKind } from './fees';
+import { cfg, flag } from '../../lib/appConfig';
 
 type Dispute = typeof disputes.$inferSelect;
 type Case = typeof arbitrationCases.$inferSelect;
@@ -30,8 +31,6 @@ type Profile = typeof profiles.$inferSelect;
 export const DISPUTE_REASONS = ['تأخیر در پرداخت', 'تأخیر در اجرا', 'کیفیت کار', 'ترک کار', 'مصالح و ابزار', 'رفتار نامناسب'] as const;
 export const DISPUTE_ASKS = ['پرداخت باقی‌مانده', 'اصلاح کار', 'بازگشت پیش‌پرداخت', 'ادامهٔ کار طبق قرارداد', 'فسخ توافقی'] as const;
 export const STAGES = ['ثبت شد', 'گفت‌وگو ۴۸ ساعت', 'حل‌کنندهٔ حضوری', 'بازدید و گزارش', 'رأی و بستن پرونده'] as const;
-const TALK_HOURS = 48;
-const APPEAL_HOURS = 72;
 const LIVE_CASE = ['awaiting_payment', 'matching', 'offered', 'assigned', 'reported', 'appealed', 'final'] as const;
 const hours = (h: number) => new Date(Date.now() + h * 3600_000);
 
@@ -200,6 +199,7 @@ async function shapeDispute(dv: DView, cs?: Case[]) {
 /* ================= طرفین: ثبت، توافق، درخواست حل‌کننده ================= */
 
 export async function openDispute(userId: string, projectId: string, input: { reason: string; ask: string; description: string; city?: string }) {
+  if (!flag('arbitration')) throw forbidden('ثبت اختلاف و داوری فعلاً بسته است؛ با پشتیبانی گفت‌وگو کن', 'FEATURE_OFF');
   const v = await projectFor(userId, projectId);
   if (v.p.status === 'cancelled') throw conflict('این پروژه لغو شده است', 'PROJECT_CLOSED');
   const [busy] = await db
@@ -220,7 +220,7 @@ export async function openDispute(userId: string, projectId: string, input: { re
       description: normalizeFa(input.description),
       city: input.city ? normalizeFa(input.city) : me.city,
       province: me.province,
-      talkUntil: hours(TALK_HOURS),
+      talkUntil: hours(arbHours().talk),
     })
     .returning();
   await projectSysMessage(v.p, `پروندهٔ اختلاف ثبت شد (${d.reason}). ۴۸ ساعت برای گفت‌وگو و توافق فرصت هست؛ بعد از آن داوری حضوری بلوک.`);
@@ -411,7 +411,7 @@ export async function appeal(userId: string, id: string, reason: string) {
   const { v } = await disputeFor(userId, id);
   const cs = await casesOf(id);
   const cur = activeCase(cs);
-  if (!cur || cur.status !== 'reported' || cur.round !== 1) throw conflict('فقط به رأی دور اول و در مهلت ۷۲ ساعت می‌شود اعتراض کرد', 'NO_APPEAL');
+  if (!cur || cur.status !== 'reported' || cur.round !== 1) throw conflict(`فقط به رأی دور اول و در مهلت ${faNum(arbHours().appeal)} ساعت می‌شود اعتراض کرد`, 'NO_APPEAL');
   if (!cur.appealUntil || cur.appealUntil.getTime() <= Date.now()) throw conflict('مهلت اعتراض تمام شده است', 'APPEAL_EXPIRED');
   const f = appealFee(cur);
   await db.transaction(async (tx) => {
@@ -533,8 +533,8 @@ export async function arbiterHome(user: User, profile: Profile | undefined) {
   const trust = p ? Math.round((p.ratingAvg / 5) * 55) + Math.min(25, p.doneCount) + Math.min(10, Math.round(p.ratingCount / 2)) + (user.kycStatus === 'verified' ? 10 : 0) : 0;
   const checklist = [
     { key: 'role', label: 'نقش مهندس یا متخصص', ok: role === 'engineer' || role === 'specialist' },
-    { key: 'exp', label: 'حداقل ۵ سال سابقه', ok: years >= 5 },
-    { key: 'trust', label: `امتیاز بلوک ۸۰ به بالا (${trust})`, ok: trust >= 80 },
+    { key: 'exp', label: `حداقل ${cfg('coefs').arb.minYears.toLocaleString('fa-IR')} سال سابقه`, ok: years >= cfg('coefs').arb.minYears },
+    { key: 'trust', label: `امتیاز بلوک ${cfg('coefs').arb.minScore.toLocaleString('fa-IR')} به بالا (${trust})`, ok: trust >= cfg('coefs').arb.minScore },
     { key: 'kyc', label: 'هویت تأییدشده', ok: user.kycStatus === 'verified' },
   ];
   let stats = null;
@@ -703,7 +703,7 @@ export async function submitReport(
         report,
         photoFileIds: saved,
         reportedAt: new Date(),
-        appealUntil: c.round === 1 ? hours(APPEAL_HOURS) : null,
+        appealUntil: c.round === 1 ? hours(arbHours().appeal) : null,
         feeReturnDue: c.round === 2 && !input.upholds,
         updatedAt: new Date(),
       })
