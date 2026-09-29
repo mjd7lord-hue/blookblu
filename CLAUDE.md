@@ -10,6 +10,8 @@
 - مالک: مجید (پیمانکار، برنامه‌نویس حرفه‌ای نیست). **با او فارسی، کوتاه و مستقیم صحبت کن.** پیش از کار بزرگ، برنامه را کوتاه بگو.
 - فرانت (جدا): `mjd7lord-hue/blookblu-front` (کنار این پوشه: `Desktoplookblu-front`) — `index.html` (کل اپ با دادهٔ نمایشی؛ منبع حقیقت فرم‌ها و UI) + `live.js` (اتصال به API).
   روش اتصال: `live.js` تابع‌های نمایشی را wrap می‌کند و دادهٔ API را به همان شکل‌های `P` (افراد، کلید = کد B-XXXX)، `ADS`، `S.convs`، `S.notifs` درمی‌آورد؛ بدون سرور اپ نمایشی می‌ماند. آدرس API: `?api=...` یا پیش‌فرض localhost:3000 روی فایل محلی.
+  فایل‌های فرانت به ترتیب بار شدن: `live.js` → `live-projects.js` → `live-more.js` → `desktop.js` (حالت دسکتاپ از ۸۰۰px؛ ساخت خود مجید).
+- پنل ادمین (جدا، خصوصی): `mjd7lord-hue/blookblu-admin` (کنار این پوشه: `Desktop\blookblu-admin`) — HTML/JS چندفایلی، فعلاً `mode:'mock'` با دادهٔ نمونه؛ لایهٔ API در `assets/js/api.js` و `config.js` (آدرس پیشنهادی `api.blooko.ir`، انتشار با `render.yaml`). نقش‌های مدیر با دسترسی هر بخش (۰/۱/۲) و محدودهٔ استان دارد؛ بک‌اند فعلاً فقط `users.is_admin` دارد.
 - مخزن: `mjd7lord-hue/blookblu`
 
 ## پشته

@@ -32,7 +32,8 @@ const html = fs
   .readFileSync(FRONT + 'index.html', 'utf8')
   .replace('<script src="live.js"></script>', inline('live.js'))
   .replace('<script src="live-projects.js"></script>', inline('live-projects.js'))
-  .replace('<script src="live-more.js"></script>', inline('live-more.js'));
+  .replace('<script src="live-more.js"></script>', inline('live-more.js'))
+  .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
 
@@ -100,7 +101,10 @@ async function register(w, role, data) {
   const log = (...a) => console.log('✓', ...a);
   // --- کاربر ۱: پیمانکار
   const A = browser('A');
-  await until(() => A.LIVE && A.LIVE.on, 'boot A');
+  await until(() => A.LIVE && A.LIVE.on, 'boot A').catch(async (e) => {
+    const h = await fetch(API + '/api/health').then((r) => r.json()).catch(() => ({}));
+    throw new Error(e.message + (h.db === 'down' ? ' — دیتابیس تست روشن نیست؛ اول بزن: npm run test:db' : ''));
+  });
   log('بوت: متصل به سرور، دادهٔ نمایشی کنار رفت؛ آگهی‌ها:', ev(A, 'ADS.length'));
   await login(A, '12' + String(Date.now()).slice(-7));
   await register(A, 'contractor', { fn: 'مجید', ln: 'یحیایی', nat: 'ایرانی', prov: 'هرمزگان', city: 'قشم', range: 'کل استان', kinds: ['اسکلت بتنی', 'سفت‌کاری'], exp: 'بیش از ۱۰ سال', contract: ['متری'], max: '۴ تا ۶ طبقه', lic: 'ندارم', pub: true, days: [0, 2] });
