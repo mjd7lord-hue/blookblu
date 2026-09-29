@@ -362,6 +362,24 @@ async function register(w, role, data) {
   ev(B, 'closeSheet()');
   await saveConfig('stories', [], uid);
 
+  const DOCSEL = 'button[onclick="go(\'docs\')"] .blk-red';
+  // بخش ۵: راهنمای امتیاز، نشان مدارک ناقص، راهنمای قرارداد، شهر کشویی، سال تولد
+  ev(B, "openTrust('me')");
+  await until(() => B.document.querySelector('#blkSteps'), 'trust steps');
+  log('راهنمای بالا بردن امتیاز:', B.document.querySelectorAll('#blkSteps .need').length, 'قدم ·', B.document.querySelector('#blkSteps .need b').textContent);
+  ev(B, "go('me')");
+  await until(() => B.document.querySelector(DOCSEL), 'docs red badge');
+  ev(B, "go('docs')");
+  await until(() => B.document.querySelector('#blkDocNeed'), 'docs checklist');
+  log('نشان قرمز مدارک ناقص:', B.document.querySelector(DOCSEL) ? 'روی «مدارک من»' : '—', '·', B.document.querySelector('#blkDocNeed b:last-child').textContent);
+  ev(B, 'openHelp()');
+  await until(() => B.document.querySelector('#blkCtrQ'), 'contract help');
+  ev(B, 'closeSheet()');
+  ev(B, "S.reg={step:'form',role:'worker',i:0,d:{prov:'هرمزگان'}};const h=fieldHTML({k:'city',t:'city',label:'شهر'},S.reg.d);window.__c=h");
+  if (!/<select[^>]*id="rf_city"/.test(ev(B, 'window.__c'))) throw new Error('شهر کشویی نیست');
+  if (!ev(B, "REG.worker[0].f.some(f=>f.k==='by')")) throw new Error('سال تولد در فرم نیست');
+  log('ثبت‌نام: شهر فهرست کشویی و سال تولد (اختیاری) در فرم');
+
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));
   ev(A, 'logout()');

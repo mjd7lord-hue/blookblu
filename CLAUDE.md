@@ -26,7 +26,7 @@ Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · *
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
 npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
-npm test               # ۵۸ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm test               # ۵۹ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
@@ -36,6 +36,7 @@ npm run alert:test                   # آزمایش پیامک هشدار سرو
 npm run front:smoke    # فرانت (../blookblu-front) در jsdom در برابر همین API روی دیتابیس تست — بعد از هر تغییر live.js
 npm run admin:smoke    # پنل ادمین (../blookblu-admin) در jsdom: ورود، KYC، تعلیق، مدیران، گفت‌وگو، تیکت، اعلان همگانی، تنظیمات، ضرایب
 npm run db:seed        # ۴ کاربر و آگهی نمونه (فقط توسعه)
+npm run showcase       # ۸ حساب و ۱۱ آگهی «نمونه» برای نمایش (شماره‌های 0900000xxxx) · پاک کردن: npm run showcase -- --remove (پیش از راه‌اندازی عمومی)
 npm run build && npm start   # start اول migration می‌زند
 ```
 **دیتابیس تست:** `TEST_DATABASE_URL` (پیش‌فرض `postgresql://blook:blook@localhost:5432/blook_test`). تست‌ها schema را پاک می‌کنند — هرگز به دیتابیس اصلی/Supabase وصلش نکن.
@@ -108,6 +109,9 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
   4. میزبانی: فایل‌ها آماده (render.yaml، پایش، uptime.yml)؛ مانده: ساخت سرویس در Render، DNS دامنهٔ blooko.ir، متغیر API_URL در گیت‌هاب؛ بعد درگاه پرداخت برای داوری
   - درگاه پرداخت (زرین‌پال یا مشابه) برای هزینهٔ داوری — نیاز به حساب پذیرنده
   5. Push (سرویس داخلی مثل نجوا/پوشه)، زمان‌بندی اعلان همگانی، ارتقای پولی آگهی؛ در فرانت هنوز نمایشی: تأیید بتن‌ریزی مهندس (S.hold) و پروژه‌های نظارتی مهندس
+
+## سرعت
+- هر درخواست از ایران به Render حدود ۱٫۲ ثانیه است؛ در فرانت هیچ لمسی نباید منتظر سرور بماند: اول نمایش با دادهٔ موجود، بعد تازه‌سازی (`render()`)، و نوار بارگذاری بالای صفحه (`busy` در live.js). راه‌حل اصلی: میزبانی داخل ایران.
 
 ## گیت
 - پیام commit فارسی و توصیفی.

@@ -60,6 +60,8 @@ const BASE: Step = {
     { k: 'fn', t: 'text', label: 'نام', req: true },
     { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true },
     ...NAT,
+    // اختیاری؛ سن روی شناسنامهٔ کاری
+    { k: 'by', t: 'text', label: 'سال تولد', pattern: /^1[34]\d\d$/, patternMsg: 'سال تولد را شمسی و ۴ رقمی بنویس، مثلاً ۱۳۶۵' },
     { k: 'prov', t: 'prov', label: 'استان محل کار', req: true },
     { k: 'city', t: 'city', label: 'شهر', req: true },
     { k: 'range', t: 'chips', label: 'تا کجا برای کار می‌روی؟', opts: Object.keys(RANGE_OPTS), req: true },
