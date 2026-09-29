@@ -33,6 +33,15 @@ const schema = z.object({
   MELIPAYAMAK_PASSWORD: z.string().optional(),
   MELIPAYAMAK_BODY_ID: z.coerce.number().optional(),
   MELIPAYAMAK_SIGN_BODY_ID: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().optional()),
+  // شمارهٔ خط پنل برای پیامک متنی (هشدار سرور)؛ کاوه‌نگار: اختیاری
+  MELIPAYAMAK_FROM: optStr,
+  KAVENEGAR_SENDER: optStr,
+  // پایش: شماره‌هایی که هشدار «دیتابیس قطع شد/برگشت» را پیامک می‌گیرند (با کاما)
+  ALERT_PHONES: z.string().default(''),
+  // بیدار نگه داشتن سرور رایگان Render: هر ۱۰ دقیقه این آدرس خودش را صدا می‌زند.
+  // اگر خالی باشد از RENDER_EXTERNAL_URL (خود Render می‌گذارد) یا PUBLIC_BASE_URL استفاده می‌شود
+  KEEPALIVE_URL: optUrl,
+  RENDER_EXTERNAL_URL: optUrl,
   CORS_ORIGINS: z.string().default('*'),
   // ذخیرهٔ فایل: supabase = Supabase Storage، local = پوشهٔ روی سرور (توسعه/تست)، s3 = هر سرویس سازگار با S3
   // auto (پیش‌فرض): اگر کلید Supabase تنظیم شده باشد supabase، وگرنه local

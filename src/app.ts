@@ -32,7 +32,7 @@ import { adminArbitrationRouter, arbiterRouter, disputesRouter, projectDisputesR
 
 export function createApp() {
   const app = express();
-  app.set('trust proxy', 1); // پشت پروکسی لیارا
+  app.set('trust proxy', 1); // پشت پروکسی Render/لیارا
   app.disable('x-powered-by');
   app.use(helmet());
   // فرانت روی گیت‌هاب (اینترنت) → API روی کامپیوتر خود کاربر: کروم این مجوز را در preflight می‌خواهد

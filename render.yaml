@@ -1,0 +1,51 @@
+# انتشار API بلوک روی Render (Blueprint): Dashboard → New → Blueprint → همین مخزن.
+# مقادیر sync:false را Render موقع ساخت می‌پرسد (از .env خودت کپی کن؛ هرگز در گیت نگذار).
+services:
+  - type: web
+    name: blookblu-api
+    runtime: node
+    region: frankfurt # نزدیک Supabase (eu-central-1)
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start # اول migration، بعد سرور
+    healthCheckPath: /api/health
+    autoDeploy: true
+    domains:
+      - api.blooko.ir
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '22'
+      - key: DATABASE_URL # Supabase Transaction pooler (6543)
+        sync: false
+      - key: DIRECT_URL # Supabase Session pooler (5432) برای migration
+        sync: false
+      - key: DB_SSL
+        value: 'true'
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: SMS_PROVIDER
+        value: melipayamak
+      - key: MELIPAYAMAK_USERNAME
+        sync: false
+      - key: MELIPAYAMAK_PASSWORD
+        sync: false
+      - key: MELIPAYAMAK_BODY_ID
+        sync: false
+      - key: MELIPAYAMAK_FROM # شمارهٔ خط برای پیامک هشدار
+        sync: false
+      - key: ALERT_PHONES # شمارهٔ مجید برای هشدار قطعی دیتابیس
+        sync: false
+      - key: STORAGE_DRIVER
+        value: supabase
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://blooko.ir,https://www.blooko.ir,https://admin.blooko.ir,https://mjd7lord-hue.github.io
+      - key: PUBLIC_BASE_URL
+        value: https://api.blooko.ir
+      - key: ARB_PAYMENT_INFO
+        sync: false

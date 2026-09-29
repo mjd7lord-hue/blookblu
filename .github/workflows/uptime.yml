@@ -1,0 +1,43 @@
+# نگهبان بیرونی: هر ۱۰ دقیقه API را صدا می‌زند (سرور رایگان Render هم بیدار می‌ماند).
+# اگر سرور یا دیتابیس جواب ندهد، اجرا «شکست» می‌خورد و گیت‌هاب به ایمیلت خبر می‌دهد.
+# فعال شدن: Settings → Secrets and variables → Actions → Variables → API_URL = https://api.blooko.ir
+# پیامک هم بخواهی (اختیاری): Secrets → MELIPAYAMAK_USERNAME, MELIPAYAMAK_PASSWORD, MELIPAYAMAK_FROM, ALERT_PHONE
+name: uptime
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    if: ${{ vars.API_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: بررسی سلامت API و دیتابیس
+        env:
+          URL: ${{ vars.API_URL }}
+        run: |
+          # سه تلاش با فاصله؛ بیدار شدن سرور خوابیده تا یک دقیقه طول می‌کشد
+          for i in 1 2 3; do
+            code=$(curl -s -o body.txt -w '%{http_code}' --max-time 90 "$URL/api/health" || true)
+            echo "try $i → $code $(cat body.txt 2>/dev/null)"
+            [ "$code" = "200" ] && exit 0
+            sleep 30
+          done
+          echo "::error::API در دسترس نیست ($code)"
+          exit 1
+
+      - name: پیامک هشدار (اختیاری)
+        if: ${{ failure() }}
+        env:
+          U: ${{ secrets.MELIPAYAMAK_USERNAME }}
+          P: ${{ secrets.MELIPAYAMAK_PASSWORD }}
+          FROM: ${{ secrets.MELIPAYAMAK_FROM }}
+          TO: ${{ secrets.ALERT_PHONE }}
+        run: |
+          [ -z "$U" ] || [ -z "$TO" ] && { echo "پیامک تنظیم نشده؛ فقط ایمیل گیت‌هاب"; exit 0; }
+          curl -s --max-time 20 -H 'Content-Type: application/json' \
+            -d "{\"username\":\"$U\",\"password\":\"$P\",\"to\":\"$TO\",\"from\":\"$FROM\",\"text\":\"بلوک: سرور API جواب نمی‌دهد ❌ داشبورد Render را چک کن.\",\"isFlash\":false}" \
+            https://rest.payamak-panel.com/api/SendSMS/SendSMS || true

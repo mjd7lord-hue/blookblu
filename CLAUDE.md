@@ -26,12 +26,13 @@ Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · *
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
 npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
-npm test               # ۴۸ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm test               # ۵۰ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
 npm run admin:grant -- 09xxxxxxxxx   # ادمین کردن کاربر (لغو: --revoke)
 npm run sms:test -- 09xxxxxxxxx      # آزمایش پنل پیامک (ملی‌پیامک) با تنظیمات .env
+npm run alert:test                   # آزمایش پیامک هشدار سرور به ALERT_PHONES (ملی‌پیامک: MELIPAYAMAK_FROM لازم)
 npm run front:smoke    # فرانت (../blookblu-front) در jsdom در برابر همین API روی دیتابیس تست — بعد از هر تغییر live.js
 npm run admin:smoke    # پنل ادمین (../blookblu-admin) در jsdom: ورود مدیر، KYC، تعلیق، ساخت مدیر، دسترسی نقش
 npm run db:seed        # ۴ کاربر و آگهی نمونه (فقط توسعه)
@@ -64,6 +65,11 @@ src/modules/
 docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌روزش کن
 ```
 
+## میزبانی و پایش
+- API روی **Render** (`render.yaml`، Blueprint، رایگان، فرانکفورت) با دامنهٔ `api.blooko.ir`؛ پنل ادمین `admin.blooko.ir` (render.yaml خودش)؛ اپ روی `blooko.ir` خودکار به `api.blooko.ir` وصل می‌شود (live.js).
+- `lib/monitor.ts`: هر ۱۰ دقیقه آدرس عمومی خودش را صدا می‌زند (Render رایگان بعد از ۱۵ دقیقه می‌خوابد) + هر دقیقه دیتابیس را چک می‌کند؛ ۳ خطای پشت‌سرهم ← پیامک به `ALERT_PHONES`، برگشت ← پیامک.
+- خاموشی کامل سرور: `.github/workflows/uptime.yml` از بیرون هر ۱۰ دقیقه `/api/health` را می‌زند (با متغیر مخزن `API_URL`)؛ شکست ← ایمیل گیت‌هاب (+ پیامک اختیاری با secrets). گیت‌هاب cron مخزن بی‌فعالیت را بعد از ۶۰ روز خاموش می‌کند.
+
 ## قواعد کد (رعایت کن)
 - **پیام خطا همیشه فارسی و قابل نمایش به کاربر**؛ با `badRequest/forbidden/notFound/conflict` از `lib/errors` و یک `code` انگلیسی ثابت (اپ روی `code` تصمیم می‌گیرد).
 - ورودی همیشه با `parse(zodSchema, ...)` از `lib/http`؛ route async داخل `ah(...)`.
@@ -92,7 +98,7 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
 - ✅ فاز ۶ (بخش ۳): `live-more.js` — ذخیره‌ها، آگهی‌های من و پاسخ‌ها، مرکز درخواست‌ها (و کارت درخواست‌ها در خانه)، تقویم ماه جاری شمسی (روزهای آزاد هفتگی = profiles.week)
 - ✅ فاز ۸ (بخش الف): پنل ادمین — نقش‌ها و دسترسی‌ها و محدودهٔ استان، ورود مدیر با پیامک، تصویر لحظه‌ای، اتصال داشبورد/کاربران/احراز/گزارش/آگهی/پروژه/داوری/حل‌کننده/قیم/مدیران/ردپا
 - ⏭ بعدی (به ترتیب پیشنهادی):
-  4. میزبانی: **تصمیم نهایی Render + دامنهٔ blooko.ir** (`api.blooko.ir` برای API، `admin.blooko.ir` برای پنل)؛ بعد درگاه پرداخت برای داوری
+  4. میزبانی: فایل‌ها آماده (render.yaml، پایش، uptime.yml)؛ مانده: ساخت سرویس در Render، DNS دامنهٔ blooko.ir، متغیر API_URL در گیت‌هاب؛ بعد درگاه پرداخت برای داوری
   - پنل ادمین بخش ب: گفت‌وگوها و تیکت پشتیبانی، اعلان همگانی، تنظیمات/ضرایب/فهرست‌ها/قوانین، استوری و آکادمی، تراکنش‌ها
   - درگاه پرداخت (زرین‌پال یا مشابه) برای هزینهٔ داوری — نیاز به حساب پذیرنده
   - میزبانی API (فعلاً فقط روی کامپیوتر خود مجید؛ لیارا کنار گذاشته شده)

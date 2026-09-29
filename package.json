@@ -17,6 +17,7 @@
     "storage:check": "tsx scripts/storage-check.ts",
     "admin:grant": "tsx scripts/admin-grant.ts",
     "sms:test": "tsx scripts/sms-test.ts",
+    "alert:test": "tsx scripts/alert-test.ts",
     "front:smoke": "tsx scripts/front-smoke.js",
     "admin:smoke": "tsx scripts/admin-smoke.js",
     "start:server": "node dist/server.js"

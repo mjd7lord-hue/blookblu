@@ -2,6 +2,7 @@ import { env } from './config/env';
 import { createApp } from './app';
 import { pool } from './db';
 import { logger } from './lib/logger';
+import { startMonitor } from './lib/monitor';
 import { recomputeVerified } from './modules/admin/admin.service';
 import { finalizeExpired } from './modules/arbitration/arbitration.service';
 
@@ -18,6 +19,9 @@ const sweep = () =>
   ]).catch((err) => logger.error({ err }, 'hourly sweep failed'));
 setTimeout(sweep, 30_000).unref();
 setInterval(sweep, 3600_000).unref();
+
+// بیدار نگه داشتن روی Render و هشدار پیامکی قطعی دیتابیس (lib/monitor.ts)
+startMonitor();
 
 function shutdown() {
   server.close(() => pool.end().finally(() => process.exit(0)));
