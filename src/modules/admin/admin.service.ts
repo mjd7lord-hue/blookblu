@@ -376,7 +376,7 @@ export async function suspendUser(admin: User, id: string, reason: string) {
   await db.transaction(async (tx) => {
     await tx.update(users).set({ status: 'suspended', updatedAt: new Date() }).where(eq(users.id, id));
     // همهٔ نشست‌ها بسته می‌شوند
-    await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, id), sql`${refreshTokens.revokedAt} is null`));
+    await tx.update(refreshTokens).set({ revokedAt: new Date(), replacedAt: null }).where(eq(refreshTokens.userId, id));
     await adminLog(tx, admin, 'user.suspend', 'user', id, reason);
   });
 }

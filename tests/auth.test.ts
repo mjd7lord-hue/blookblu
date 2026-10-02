@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { api, auth, login, nextPhone } from './helpers';
+import { eq } from 'drizzle-orm';
+import { db } from '../src/db';
+import { refreshTokens } from '../src/db/schema';
+import { sha256 } from '../src/lib/crypto';
 
 describe('OTP auth', () => {
   it('accepts Persian digits and +98 format', async () => {
@@ -40,15 +44,26 @@ describe('OTP auth', () => {
     expect(r.status).toBe(429);
   });
 
-  it('refresh rotates and detects reuse', async () => {
+  it('refresh rotates; lost response is forgiven briefly; later reuse = theft', async () => {
     const u = await login();
     const r1 = await api().post('/api/auth/refresh').send({ refreshToken: u.refresh });
     expect(r1.status).toBe(200);
+    // جواب r1 به گوشی نرسید و همان توکن قدیمی دوباره آمد (اینترنت ضعیف): نشست نمی‌پرد
+    const again = await api().post('/api/auth/refresh').send({ refreshToken: u.refresh });
+    expect(again.status).toBe(200);
+
+    // بعد از مهلت، استفادهٔ دوباره = سرقت
+    await db.update(refreshTokens).set({ revokedAt: new Date(Date.now() - 10 * 60_000), replacedAt: new Date(Date.now() - 10 * 60_000) }).where(eq(refreshTokens.tokenHash, sha256(u.refresh)));
     const reuse = await api().post('/api/auth/refresh').send({ refreshToken: u.refresh });
     expect(reuse.body.error.code).toBe('REFRESH_REUSED');
     // بعد از تشخیص سرقت، توکن جدید هم باطل است
     const r2 = await api().post('/api/auth/refresh').send({ refreshToken: r1.body.refreshToken });
     expect(r2.status).toBe(401);
+
+    // توکنِ خارج‌شده (logout) حتی در مهلت هم پذیرفته نمی‌شود
+    const v = await login();
+    await api().post('/api/auth/logout').send({ refreshToken: v.refresh }).expect((x) => expect(x.status).toBeLessThan(300));
+    expect((await api().post('/api/auth/refresh').send({ refreshToken: v.refresh })).status).toBe(401);
   });
 
   it('protects /me', async () => {

@@ -3,6 +3,7 @@ import { db } from '../../db';
 import { adResponses, ads, conversationMembers, conversations, profiles, users, type Role } from '../../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizeFa } from '../../lib/text';
+import { bumpView } from '../../lib/views';
 import { blockedIds, trustOf } from '../profiles/profiles.service';
 import { notify } from '../notifications/notify';
 import { ensureConversation, postMessage } from '../chat/chat.service';
@@ -211,6 +212,22 @@ function publicAd(a: typeof ads.$inferSelect) {
   return rest;
 }
 
+/** پاسخ‌های «پرسش تخصصی» برای همه دیده می‌شوند (بقیهٔ پاسخ‌ها خصوصی و فقط برای آگهی‌دهنده است) */
+export async function publicAnswers(adId: string) {
+  const [ad] = await db.select({ type: ads.type }).from(ads).where(eq(ads.id, adId)).limit(1);
+  if (!ad) throw notFound('آگهی پیدا نشد');
+  if (ad.type !== 'consult') throw badRequest('فقط پاسخ‌های پرسش تخصصی عمومی است', 'NOT_CONSULT');
+  const rows = await db
+    .select({ r: adResponses, author: { ...authorCols, kyc: users.kycStatus } })
+    .from(adResponses)
+    .innerJoin(profiles, eq(profiles.id, adResponses.profileId))
+    .innerJoin(users, eq(users.id, profiles.userId))
+    .where(and(eq(adResponses.adId, adId), ne(adResponses.status, 'withdrawn'), eq(users.status, 'active')))
+    .orderBy(adResponses.createdAt)
+    .limit(200);
+  return rows.map(({ r: x, author }) => ({ id: x.id, message: x.message, createdAt: x.createdAt, best: x.status === 'accepted', author: shapeAuthor(author) }));
+}
+
 export async function getAd(id: string, viewer?: User) {
   const [row] = await db
     .select({ ad: ads, author: { ...authorCols, kyc: users.kycStatus }, ownerId: profiles.userId })
@@ -224,7 +241,10 @@ export async function getAd(id: string, viewer?: User) {
   if (!own && row.ad.status !== 'active') throw notFound('این آگهی دیگر فعال نیست', 'AD_INACTIVE');
   if (!own && (await blockedIds(viewer?.id)).includes(row.ownerId)) throw notFound('آگهی پیدا نشد');
 
-  if (!own) await db.update(ads).set({ views: sql`${ads.views} + 1` }).where(eq(ads.id, id));
+  if (!own) {
+    await db.update(ads).set({ views: sql`${ads.views} + 1` }).where(eq(ads.id, id));
+    await bumpView('ad', id);
+  }
 
   let myResponse = null;
   if (viewer && !own) {

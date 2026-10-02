@@ -518,3 +518,13 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/visits/:id/confirm` · `/decline` | 🔒 مهندس (`{ reason? }`) |
 | POST | `/visits/:id/cancel` | 🔒 درخواست‌دهنده؛ بازدید تأییدشده کمتر از ۱۲ ساعت مانده: `LATE_CANCEL` |
 | POST | `/visits/:id/done` | 🔒 مهندس، از روز بازدید به بعد: `{ checklist: [{item, ok}], report }` |
+
+---
+
+# تکمیلی: نشست پایدار، بازدید و آمار، پاسخ عمومی پرسش‌ها، پیام صوتی
+
+- **تمدید نشست:** اگر جواب `/auth/refresh` در شبکه گم شود و همان توکن قبلی تا ۳ دقیقه دوباره بیاید، نشست تازه داده می‌شود (ستون `refresh_tokens.replaced_at`). استفادهٔ دوباره بعد از آن، یا توکنِ خروج/تعلیق/سرقت = `REFRESH_REUSED`/`REFRESH_INVALID`.
+- **بازدید:** `GET /profiles/:code` و `GET /ads/:id` توسط دیگران (نه خود صاحب) یک بازدید ثبت می‌کند (`profiles.views`، `ads.views` و جدول روزانهٔ `view_days`).
+- `GET /me/stats` 🔒 نقش — آمار واقعی ۶ ماه شمسی اخیر: `months`، `profileViews {total, monthly}`، `adViews {total, monthly, activeAds}`، `responses {received, receivedMonthly, sent, sentMonthly, answerRate, avgAnswerMinutes, conversion}`، `projects {total, active, done}`، `income {total, monthly}` (پرداخت‌های تأییدشده که مجری بوده)، `demand [{skill, n}]` (پرتقاضاترین مهارت‌های آگهی‌های ۳۰ روز اخیر در استان).
+- `GET /ads/:id/answers` — پاسخ‌های «پرسش تخصصی» برای همه (`[{id, message, createdAt, best, author}]`)؛ نوع دیگر: `NOT_CONSULT`. پاسخ دادن همان `POST /ads/:id/responses`.
+- **پیام صوتی:** `POST /conversations/:id/attachments` با فایل صدا (WebM/Ogg/M4A، تشخیص از محتوا) و `duration` ← پیام `kind: voice` با `payload.dur` و لینک امضاشده.

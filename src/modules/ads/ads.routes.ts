@@ -69,6 +69,14 @@ r.get(
 );
 
 r.get(
+  '/:id/answers',
+  ah(async (req, res) => {
+    const { id } = parse(uuidParam, req.params);
+    res.json({ items: await svc.publicAnswers(id) });
+  }),
+);
+
+r.get(
   '/:id',
   optionalAuth,
   ah(async (req, res) => {

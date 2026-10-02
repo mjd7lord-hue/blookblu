@@ -151,6 +151,9 @@ async function issueTokens(userId: string, userAgent?: string) {
   return { accessToken: signAccess(userId), refreshToken };
 }
 
+// تا ۳ دقیقه بعد از تمدید، همان توکن قبلی هنوز پذیرفته می‌شود (جواب گم‌شده در شبکه)
+const REFRESH_GRACE_MS = 3 * 60_000;
+
 /** refresh token یک‌بار مصرف است و با هر بار استفاده عوض می‌شود */
 export async function refresh(token: string, userAgent?: string) {
   const [row] = await db
@@ -159,15 +162,20 @@ export async function refresh(token: string, userAgent?: string) {
     .where(eq(refreshTokens.tokenHash, sha256(token)))
     .limit(1);
   if (!row || row.expiresAt < new Date()) throw unauthorized('نشست منقضی شده؛ دوباره وارد شوید', 'REFRESH_INVALID');
+  if (row.revokedAt && row.replacedAt && Date.now() - row.replacedAt.getTime() < REFRESH_GRACE_MS) {
+    // جواب تمدید قبلی به گوشی نرسیده (اینترنت ضعیف) و همان توکن دوباره آمده: سرقت نیست، نشست تازه
+    const [u0] = await db.select({ status: users.status }).from(users).where(eq(users.id, row.userId)).limit(1);
+    if (u0?.status === 'active') return issueTokens(row.userId, userAgent);
+  }
   if (row.revokedAt) {
     // استفادهٔ دوباره از توکن باطل‌شده = احتمال سرقت؛ همهٔ نشست‌ها بسته می‌شود
-    await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, row.userId));
+    await db.update(refreshTokens).set({ revokedAt: new Date(), replacedAt: null }).where(eq(refreshTokens.userId, row.userId));
     throw unauthorized('نشست نامعتبر است؛ دوباره وارد شوید', 'REFRESH_REUSED');
   }
   const [u] = await db.select({ status: users.status }).from(users).where(eq(users.id, row.userId)).limit(1);
   if (!u || u.status !== 'active') throw unauthorized('حساب فعال نیست', 'REFRESH_INVALID');
 
-  await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, row.id));
+  await db.update(refreshTokens).set({ revokedAt: new Date(), replacedAt: new Date() }).where(eq(refreshTokens.id, row.id));
   return issueTokens(row.userId, userAgent);
 }
 

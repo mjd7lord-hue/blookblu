@@ -31,6 +31,7 @@ import { projectStatementsRouter, statementsRouter } from './modules/projects/st
 import { dailyRouter, projectDailyRouter, projectFilesRouter } from './modules/projects/worksite';
 import appContentRoutes from './modules/content/content.routes';
 import teamRoutes from './modules/team/team.routes';
+import statsRoutes from './modules/profiles/stats.routes';
 import visitRoutes from './modules/visits/visits.routes';
 import { cfg, configReady } from './lib/appConfig';
 import { countRequests } from './lib/metrics';
@@ -79,6 +80,7 @@ export function createApp() {
   app.use('/api/me', mediaRoutes);
   app.use('/api/me', kycRoutes);
   app.use('/api/me/team', teamRoutes);
+  app.use('/api/me/stats', statsRoutes);
   app.use('/api/files', fileRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/profiles', profileRoutes);

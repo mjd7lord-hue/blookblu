@@ -99,6 +99,8 @@ export const refreshTokens = pgTable(
     userAgent: varchar('user_agent', { length: 255 }),
     expiresAt: ts('expires_at').notNull(),
     revokedAt: ts('revoked_at'),
+    // با تمدید عادی پر می‌شود؛ خروج، تعلیق و سرقت خالی‌اش می‌کنند (مهلت جواب گم‌شده فقط برای تمدید)
+    replacedAt: ts('replaced_at'),
     createdAt: createdAt(),
   },
   (t) => [index('refresh_user_idx').on(t.userId)],
@@ -128,6 +130,8 @@ export const profiles = pgTable(
     showPhone: boolean('show_phone').notNull().default(false),
     // فیلدهای مخصوص هر نقش (رشته، پایه، رتبه، نوع قرارداد، ...)؛ با zod اعتبارسنجی می‌شود
     data: jsonb('data').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    // بازدید پروفایل عمومی توسط دیگران (آمار عملکرد)
+    views: integer('views').notNull().default(0),
     week: jsonb('week').$type<WeekState>().notNull().default(sql`'["o","o","o","o","o","o","o"]'::jsonb`),
     // نشان «دارای مدرک/پروانه» پس از بررسی مدارک
     verified: boolean('verified').notNull().default(false),
@@ -1090,4 +1094,17 @@ export const visits = pgTable(
       .on(t.engineerProfileId, t.day, t.slot)
       .where(sql`status in ('requested', 'confirmed')`),
   ],
+);
+
+/* ================= آمار عملکرد: بازدید روزانهٔ پروفایل و آگهی ================= */
+
+export const viewDays = pgTable(
+  'view_days',
+  {
+    kind: varchar('kind', { length: 8 }).notNull(), // profile | ad
+    itemId: uuid('item_id').notNull(),
+    day: date('day').notNull(),
+    n: integer('n').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.itemId, t.day] })],
 );

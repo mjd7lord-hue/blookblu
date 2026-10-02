@@ -17,6 +17,7 @@ import { workCode } from '../../lib/crypto';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizeFa } from '../../lib/text';
 import { cfg, flag } from '../../lib/appConfig';
+import { bumpView } from '../../lib/views';
 import { privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
 import { validateRoleData, type RoleData } from '../roles/validate';
 import { publicFileUrl, purgeFiles } from '../files/files.service';
@@ -282,7 +283,7 @@ export async function deleteAccount(user: User) {
     await tx.delete(profiles).where(eq(profiles.userId, user.id));
     // کد ملی و سابقهٔ احراز هویت هم پاک می‌شود
     await tx.delete(kycRequests).where(eq(kycRequests.userId, user.id));
-    await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, user.id));
+    await tx.update(refreshTokens).set({ revokedAt: new Date(), replacedAt: null }).where(eq(refreshTokens.userId, user.id));
     await tx
       .update(users)
       .set({ status: 'deleted', firstName: null, lastName: null, activeRole: null, kycStatus: 'none', isAdmin: false, prefs: {}, updatedAt: new Date() })
@@ -321,6 +322,11 @@ export async function publicProfile(code: string, viewer?: User) {
   const own = viewer?.id === row.p.userId;
   if (!row.p.isPublic && !own) throw notFound('این پروفایل خصوصی است', 'PROFILE_PRIVATE');
   if (!own && (await blockedIds(viewer?.id)).includes(row.p.userId)) throw notFound('پروفایل پیدا نشد');
+  // آمار عملکرد: بازدید دیگران
+  if (!own) {
+    await db.update(profiles).set({ views: sql`${profiles.views} + 1` }).where(eq(profiles.id, row.p.id));
+    await bumpView('profile', row.p.id);
+  }
 
   const p = row.p;
   const [skills, revs, guars, stars, portfolio] = await Promise.all([
