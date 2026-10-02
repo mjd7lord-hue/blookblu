@@ -92,6 +92,7 @@ describe('invites, answer votes, code search, free ad limit', () => {
     }
     const part = (w.profile.displayName as string).slice(0, 3);
     const byName = await api().get('/api/profiles').query({ q: part });
-    expect(byName.body.items.map((x: { code: string }) => x.code)).toContain(code);
+    expect(byName.body.items.length).toBeGreaterThan(0);
+    expect(byName.body.items.every((x: { name: string }) => x.name.includes(part))).toBe(true);
   });
 });

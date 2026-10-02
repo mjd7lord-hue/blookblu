@@ -30,6 +30,7 @@ let API = '';
 const inline = (f) => () => '<script>' + fs.readFileSync(FRONT + f, 'utf8') + '</script>';
 const html = fs
   .readFileSync(FRONT + 'index.html', 'utf8')
+  .replace('<script src="flow.js"></script>', inline('flow.js'))
   .replace('<script src="live.js"></script>', inline('live.js'))
   .replace('<script src="live-projects.js"></script>', inline('live-projects.js'))
   .replace('<script src="live-more.js"></script>', inline('live-more.js'))
@@ -365,8 +366,8 @@ async function register(w, role, data) {
   const DOCSEL = 'button[onclick="go(\'docs\')"] .blk-red';
   // بخش ۵: راهنمای امتیاز، نشان مدارک ناقص، راهنمای قرارداد، شهر کشویی، سال تولد
   ev(B, "openTrust('me')");
-  await until(() => B.document.querySelector('#blkSteps'), 'trust steps');
-  log('راهنمای بالا بردن امتیاز:', B.document.querySelectorAll('#blkSteps .tstep').length, 'قدم ·', B.document.querySelector('#blkSteps .tstep b').textContent);
+  await until(() => ev(B, "S.cur==='profile'") && B.document.querySelector('#pvScore[open] .tstep'), 'trust steps');
+  log('پروفایل و شناسنامه یک صفحه؛ «امتیاز از کجا آمده» باز شد با', B.document.querySelectorAll('#pvScore .tstep').length, 'قدم ·', B.document.querySelector('#pvScore .tstep b').textContent);
   ev(B, "go('me')");
   await until(() => B.document.querySelector(DOCSEL), 'docs red badge');
   ev(B, "go('docs')");
@@ -379,6 +380,66 @@ async function register(w, role, data) {
   if (!/<select[^>]*id="rf_city"/.test(ev(B, 'window.__c'))) throw new Error('شهر کشویی نیست');
   if (!ev(B, "REG.worker[0].f.some(f=>f.k==='by')")) throw new Error('سال تولد در فرم نیست');
   log('ثبت‌نام: شهر فهرست کشویی و سال تولد (اختیاری) در فرم');
+
+  /* ---------------- دور ۲۷: جست‌وجوی کد، درخواست همکاری، آگهی رایگان، رأی، برآورد ← نیرو، قرارداد از چت ---------------- */
+  const codeA = ev(A, 'LIVE.pub.code'), codeB = ev(B, 'LIVE.pub.code');
+  ev(A, "closeSheet();exploreMode('workers')");
+  ev(A, `S.q='${codeB.toLowerCase().replace('-', '')}';renderResults()`);
+  await until(() => ev(A, `S.cur==='profile' && S.pid==='${codeB}'`), 'code search opens profile');
+  log('جست‌وجوی کد کاربری بدون خط تیره و با حروف کوچک ← پروفایل', codeB, 'باز شد');
+  ev(A, 'S.q=""');
+
+  ev(A, `collabReq('${codeB}')`);
+  await until(() => A.document.getElementById('crT') || A.document.querySelector('#crW .chip'), 'collab sheet');
+  ev(A, "S.cr.pick='new';document.getElementById('crT').value='بتن‌ریزی سقف ویلای طولا';document.getElementById('crO').value='۲٬۲۰۰٬۰۰۰ تومان روزانه';collabSend()");
+  await until(() => /درخواست همکاری فرستاده شد/.test((A.document.getElementById('sheetTitle') || {}).textContent || ''), 'collab confirm page');
+  log('درخواست همکاری ← صفحهٔ تأیید:', A.document.querySelector('.rd-where').textContent, '·', A.document.querySelectorAll('.rd-next li').length, 'قدم بعدی');
+  ev(B, "LIVE.loaded.req=0;S.rtab='in';S.rk='collab';go('req')");
+  await until(() => ev(B, "(S.req[S.role]||[]).some(r=>r._inv&&!r.st)"), 'invite in requests center');
+  log('مرکز درخواست‌ها (دریافتی، همکاری):', ev(B, "document.querySelector('#s-req .rq b').textContent"));
+  ev(B, "rqAct('in',(S.req[S.role]||[]).findIndex(r=>r._inv&&!r.st),'ok')");
+  await until(() => ev(B, "S.cur==='chat'"), 'accept invite → chat');
+  log('قبول درخواست همکاری ← چت باز شد:', ev(B, "convName(S.convs.find(c=>c.id===S.cid))"));
+
+  // قرارداد از داخل چت: دکمهٔ «ثبت قرارداد» و ۳ گام
+  if (!B.document.querySelector('#s-chat .qr-ctr')) throw new Error('دکمهٔ «ثبت قرارداد» در چت نیست');
+  ev(B, 'ctrWizard()');
+  await until(() => B.document.getElementById('cwJ'), 'contract wizard step 1');
+  ev(B, "document.getElementById('cwJ').value='بتن‌ریزی سقف ویلای طولا';document.getElementById('cwP').value='۲٬۲۰۰٬۰۰۰ تومان روزانه';ctrStep(2)");
+  await until(() => B.document.getElementById('cwS'), 'contract wizard step 2');
+  ev(B, 'ctrStep(3)');
+  await until(() => B.document.querySelector('.cw-sum'), 'contract wizard step 3');
+  ev(B, 'ctrSend()');
+  await until(() => ev(B, "S.convs.find(c=>c.id===S.cid).msgs.some(m=>m.k==='deal'&&m.id)"), 'contract proposal sent');
+  log('ثبت قرارداد از چت (۳ گام) ← پیشنهاد با مراحل پرداخت روی سرور');
+
+  // آگهی رایگان: پیمانکار یک آگهی فعال دارد
+  ev(A, "closeSheet();go('home');LIVE.loaded['myads:'+S.role]=Date.now();openWizard()");
+  await until(() => /یک آگهی فعال داری/.test((A.document.getElementById('sheetTitle') || {}).textContent || ''), 'free ad limit sheet');
+  log('محدودیت آگهی رایگان:', [...A.document.querySelectorAll('#sb button')].map((b) => b.textContent.trim()).slice(0, 3).join(' | '));
+  ev(A, 'closeSheet()');
+
+  // پرسش تخصصی: کارگر هم پاسخ می‌دهد؛ مفید بود
+  const q = await ev(A, "LIVE.api('POST','/ads',{type:'consult',title:'فاصلهٔ خاموت ستون چقدر باشد؟',province:'هرمزگان',city:'قشم',audience:['engineer']})");
+  await ev(B, `LIVE.api('POST','/ads/${q.ad.id}/responses',{message:'در ناحیهٔ بحرانی نزدیک‌تر، حدود ۱۰ سانتی‌متر.'})`);
+  await ev(A, `LIVE.loadAds('consult',true)`);
+  ev(A, `openAd('${q.ad.id}')`);
+  await until(() => ev(A, `S.cur==='qa' && (S.ans['${q.ad.id}']||[]).length===1`), 'qa answers');
+  ev(A, `voteAns('${q.ad.id}',0,1)`);
+  await until(() => ev(A, `(S.ans['${q.ad.id}'][0]||{}).up===1 && S.ans['${q.ad.id}'][0].my===1`), 'vote saved');
+  if (A.document.getElementById('s-qa').innerHTML.includes('درخواست بازدید')) throw new Error('«درخواست بازدید» هنوز در پرسش تخصصی است');
+  log('پرسش تخصصی: پاسخ کارگر + «مفید بود» روی سرور:', ev(A, `document.querySelector('#s-qa .vt.on .num').textContent`));
+
+  // برآورد ← نیروی این پروژه (حمام)؛ آگهی فعال دیگری هست ← فقط درخواست‌ها
+  ev(A, "go('est');estType('bath');estGo()");
+  await until(() => ev(A, "S.cur==='estgo'") && A.document.getElementById('egT'), 'estimate → workforce page');
+  await until(() => ev(A, `!!P['${codeB}'] && egCands().some(c=>c.id==='${codeB}')`), 'candidates');
+  log('برآورد ← آگهی آماده:', ev(A, "document.getElementById('egT').value"), '· نقش‌ها:', ev(A, "S.eg.roles.map(r=>ROLES[r].n).join('، ')"));
+  ev(A, `egPick('${codeB}');estPublish()`);
+  await until(() => /درخواست/.test((A.document.getElementById('sheetTitle') || {}).textContent || ''), 'estimate publish');
+  const inv = await ev(B, "LIVE.api('GET','/invites?dir=in')");
+  log('«انتشار و ارسال»:', A.document.getElementById('sheetTitle').textContent, '· درخواست‌های کارگر:', inv.items.length);
+  ev(A, 'closeSheet()');
 
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));
