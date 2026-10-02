@@ -1108,3 +1108,45 @@ export const viewDays = pgTable(
   },
   (t) => [primaryKey({ columns: [t.kind, t.itemId, t.day] })],
 );
+
+/* ================= درخواست همکاری مستقیم (دعوت یک نفر به کار) و رأی به پاسخ پرسش ================= */
+
+export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'rejected', 'withdrawn']);
+
+export const invites = pgTable(
+  'invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromProfileId: uuid('from_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    toProfileId: uuid('to_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    adId: uuid('ad_id').references(() => ads.id, { onDelete: 'set null' }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    title: varchar('title', { length: 160 }).notNull(),
+    startWhen: varchar('start_when', { length: 60 }),
+    offer: varchar('offer', { length: 120 }),
+    message: text('message'),
+    status: inviteStatusEnum('status').notNull().default('pending'),
+    respondedAt: ts('responded_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('invites_to_idx').on(t.toProfileId, t.status), index('invites_from_idx').on(t.fromProfileId)],
+);
+
+export const answerVotes = pgTable(
+  'answer_votes',
+  {
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => adResponses.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    value: smallint('value').notNull(), // ۱ = مفید بود، ‎-۱ = مفید نبود
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.responseId, t.userId] })],
+);

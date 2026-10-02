@@ -59,7 +59,7 @@
 
 | متد | مسیر | توضیح |
 |---|---|---|
-| GET | `/profiles?role=&q=&province=&city=&verified=true&available=true&page=&limit=` | جست‌وجوی افراد؛ احرازشده و در دسترس اول |
+| GET | `/profiles?role=&q=&province=&city=&verified=true&available=true&page=&limit=` | جست‌وجوی افراد؛ احرازشده و در دسترس اول. `q` = بخشی از نام/عنوان/مهارت یا کد کاربری (`b4x92`، `B-4X92`، `4X92` همه یکی) |
 | GET | `/profiles/:code` | شناسنامهٔ کاری: `avatarUrl`، `portfolio`، مهارت‌ها، اعتبار (`trust`)، ستاره‌ها، نظرها، قیم‌ها، روزهای هفته. شماره فقط با `showPhone` و برای کاربر واردشده |
 
 `trust = { satisfaction(۵۵), projects(۲۵), reviews(۱۰), identity(۱۰), total(۱۰۰) }`
@@ -88,11 +88,15 @@
 ```
 مخاطب مجاز: `work` → کارفرما/پیمانکار/شرکت · `job` → کارگر/متخصص/مهندس/پیمانکار/شرکت · `consult` → مهندس/متخصص/پیمانکار (حداکثر ۳ گروه).
 
+**آگهی رایگان:** هر کاربر (در همهٔ نقش‌هایش) حداکثر `limits.freeAds` (پیش‌فرض ۱ = `FREE_AD_LIMIT` اپ) آگهی `work`/`job` فعال دارد؛ بیشتر ← `409 FREE_AD_LIMIT`. پرسش تخصصی محدود نیست. سقف کلی ۲۰ آگهی فعال برای هر پروفایل.
+
 ## پاسخ به آگهی و درخواست‌ها 👤
 
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
-| POST | `/ads/:id/responses` | `{ message, offer? }` | نقش فعال باید در مخاطبان آگهی باشد (`NOT_AUDIENCE`) |
+| POST | `/ads/:id/responses` | `{ message, offer? }` | نقش فعال باید در مخاطبان آگهی باشد (`NOT_AUDIENCE`)؛ به پرسش تخصصی همه پاسخ می‌دهند |
+| GET | `/ads/:id/answers` | — | پاسخ‌های عمومی پرسش: `up`، `down`، `score`، `myVote` (با ورود)؛ مرتب بر اساس امتیاز |
+| POST | `/responses/:id/vote` 🔒 | `{ value: 1\|-1\|0 }` | مفید بود / نبود / برداشتن رأی (نه به پاسخ خودت: `OWN_ANSWER`) |
 | GET | `/ads/:id/responses` | — | پاسخ‌های آگهی من |
 | GET | `/responses?dir=in\|out` | — | درخواست‌های ورودی / ارسالی من |
 | PATCH | `/responses/:id` | `{ status: accepted\|rejected }` | فقط صاحب آگهی |
@@ -528,3 +532,15 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 - `GET /me/stats` 🔒 نقش — آمار واقعی ۶ ماه شمسی اخیر: `months`، `profileViews {total, monthly}`، `adViews {total, monthly, activeAds}`، `responses {received, receivedMonthly, sent, sentMonthly, answerRate, avgAnswerMinutes, conversion}`، `projects {total, active, done}`، `income {total, monthly}` (پرداخت‌های تأییدشده که مجری بوده)، `demand [{skill, n}]` (پرتقاضاترین مهارت‌های آگهی‌های ۳۰ روز اخیر در استان).
 - `GET /ads/:id/answers` — پاسخ‌های «پرسش تخصصی» برای همه (`[{id, message, createdAt, best, author}]`)؛ نوع دیگر: `NOT_CONSULT`. پاسخ دادن همان `POST /ads/:id/responses`.
 - **پیام صوتی:** `POST /conversations/:id/attachments` با فایل صدا (WebM/Ogg/M4A، تشخیص از محتوا) و `duration` ← پیام `kind: voice` با `payload.dur` و لینک امضاشده.
+
+## درخواست همکاری مستقیم: `/api/invites` 👤
+
+دعوت یک یا چند نفر به کار خودت (از پروفایل، یا «نیروی این پروژه» در برآورد). هر درخواست گفت‌وگو با گیرنده باز می‌کند و پیام درخواست اولین پیام آن است.
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| POST | `/invites` | `{ profileCode \| profileCodes[≤۳۰], adId?, title, startWhen?, offer?, message? }` | `{ items:[{id, conversationId, code}], skipped:[{code, reason}] }`؛ تکراری در انتظار ← `INVITE_DUPLICATE` |
+| GET | `/invites?dir=in\|out` | — | دریافتی (با `from`) یا ارسالی (با `to`)؛ `status: pending\|accepted\|rejected` |
+| PATCH | `/invites/:id` | `{ status: accepted\|rejected }` | فقط گیرنده؛ پیام سیستمی در چت + اعلان به فرستنده |
+| POST | `/invites/:id/withdraw` | — | پس گرفتن (فقط فرستنده، فقط در انتظار) |
+

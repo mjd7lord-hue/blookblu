@@ -128,6 +128,8 @@ export const DEFAULTS = {
   // متن و روشن/خاموش اعلان‌های خودکار (نمایشی در پنل)، و قیمت ارتقای آگهی — فعلاً فقط ذخیره می‌شوند
   notifTemplates: null as unknown,
   boost: null as unknown,
+  // محدودیت آگهی رایگان (FREE_AD_LIMIT در اپ): تعداد آگهی کار/نیروی فعال هر کاربر
+  limits: { freeAds: 1 },
 };
 
 export type ConfigKey = keyof typeof DEFAULTS;
@@ -177,6 +179,7 @@ const SCHEMAS: Partial<Record<ConfigKey, z.ZodTypeAny>> = {
       }),
     )
     .max(200),
+  limits: z.object({ freeAds: z.number().int().min(1).max(50) }),
   visitTypes: z.array(z.object({ n: z.string().min(2).max(80), d: z.string().max(30), p: z.number().int().min(0) })).min(1).max(20),
   whatsNew: z.object({
     on: z.boolean(),

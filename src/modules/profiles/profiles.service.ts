@@ -15,7 +15,7 @@ import {
 } from '../../db/schema';
 import { workCode } from '../../lib/crypto';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
-import { normalizeFa } from '../../lib/text';
+import { normalizeFa, toLatinDigits } from '../../lib/text';
 import { cfg, flag } from '../../lib/appConfig';
 import { bumpView } from '../../lib/views';
 import { privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
@@ -412,8 +412,12 @@ export async function searchProfiles(
   if (q.available) conds.push(sql`${profiles.week} @> '["a"]'::jsonb`);
   if (q.q) {
     const term = `%${normalizeFa(q.q)}%`;
+    // کد کاربری بدون حساسیت به حروف و خط تیره: «b4x92»، «B-4X92»، «۴X92»
+    const raw = toLatinDigits(q.q).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const code = /^B?[A-Z0-9]{4}$/.test(raw) ? 'B-' + raw.slice(-4) : null;
     conds.push(
       or(
+        ...(code ? [eq(profiles.code, code)] : []),
         ilike(profiles.displayName, term),
         ilike(profiles.title, term),
         sql`exists (select 1 from ${profileSkills} s where s.profile_id = ${profiles.id} and s.title ilike ${term})`,

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { AD_TYPES, ROLES, WORK_RANGES } from '../../db/schema';
 import { ah, pageQuery, parse, uuidParam } from '../../lib/http';
 import { toLatinDigits } from '../../lib/text';
-import { optionalAuth, requireProfile } from '../../middlewares/auth';
+import { optionalAuth, requireAuth, requireProfile } from '../../middlewares/auth';
 import { PROVINCES } from '../roles/forms';
 import * as svc from './ads.service';
 
@@ -70,9 +70,10 @@ r.get(
 
 r.get(
   '/:id/answers',
+  optionalAuth,
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
-    res.json({ items: await svc.publicAnswers(id) });
+    res.json({ items: await svc.publicAnswers(id, req.user) });
   }),
 );
 
@@ -164,6 +165,17 @@ responsesRouter.patch(
     const { id } = parse(uuidParam, req.params);
     const { status } = parse(z.object({ status: z.enum(['accepted', 'rejected']) }), req.body);
     res.json({ response: await svc.answerResponse(req.profile!, id, status) });
+  }),
+);
+
+/** مفید بود / نبود برای پاسخ پرسش تخصصی */
+responsesRouter.post(
+  '/:id/vote',
+  requireAuth,
+  ah(async (req, res) => {
+    const { id } = parse(uuidParam, req.params);
+    const { value } = parse(z.object({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) }), req.body);
+    res.json(await svc.voteAnswer(req.user!, id, value));
   }),
 );
 

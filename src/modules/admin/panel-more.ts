@@ -388,6 +388,7 @@ const CONFIG_MODULE: Record<ConfigKey, AdminModule> = {
   courses: 'academy',
   visitTypes: 'coefs',
   whatsNew: 'settings',
+  limits: 'pay',
 };
 
 r.put(

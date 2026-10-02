@@ -64,6 +64,13 @@
       "when": 1790937106084,
       "tag": "0008_session_grace_views",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790941945177,
+      "tag": "0009_invites_votes",
+      "breakpoints": true
     }
   ]
 }

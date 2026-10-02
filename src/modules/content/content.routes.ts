@@ -28,6 +28,7 @@ export function publicConfig() {
     coefs: cfg('coefs'),
     visitTypes: cfg('visitTypes'),
     whatsNew: cfg('whatsNew').on ? cfg('whatsNew') : null,
+    limits: cfg('limits'),
     roles: Object.fromEntries(ROLES.map((k) => [k, { on: cat.roles?.[k]?.on !== false }])),
   };
 }

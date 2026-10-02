@@ -1,6 +1,7 @@
 import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
-import { adResponses, ads, conversationMembers, conversations, profiles, users, type Role } from '../../db/schema';
+import { adResponses, ads, answerVotes, conversationMembers, conversations, profiles, users, type Role } from '../../db/schema';
+import { cfg } from '../../lib/appConfig';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizeFa } from '../../lib/text';
 import { bumpView } from '../../lib/views';
@@ -62,6 +63,24 @@ export async function createAd(profile: Profile, input: AdInput) {
     .from(ads)
     .where(and(eq(ads.profileId, profile.id), eq(ads.status, 'active')));
   if (n >= 20) throw badRequest('حداکثر ۲۰ آگهی فعال می‌توانید داشته باشید', 'AD_LIMIT');
+  // آگهی رایگان: هر کاربر (در همهٔ نقش‌هایش) فقط FREE_AD_LIMIT آگهی کار/نیروی فعال؛ پرسش تخصصی آزاد است
+  if (input.type !== 'consult') {
+    const limit = cfg('limits').freeAds;
+    const [{ m }] = await db
+      .select({ m: sql<number>`count(*)::int` })
+      .from(ads)
+      .innerJoin(profiles, eq(profiles.id, ads.profileId))
+      .where(and(eq(profiles.userId, profile.userId), eq(ads.status, 'active'), ne(ads.type, 'consult')));
+    if (m >= limit) {
+      throw conflict(
+        limit === 1
+          ? 'یک آگهی فعال داری. آن را ویرایش کن، ببند، یا برای آگهی بیشتر ارتقا بده.'
+          : `${limit} آگهی فعال داری. یکی را ببند یا برای آگهی بیشتر ارتقا بده.`,
+        'FREE_AD_LIMIT',
+        { limit },
+      );
+    }
+  }
 
   const c = clean(input) as AdInput;
   const [ad] = await db
@@ -95,7 +114,7 @@ export async function removeAd(profile: Profile, id: string) {
   await db.update(ads).set({ status: 'removed', updatedAt: new Date() }).where(eq(ads.id, id));
 }
 
-const authorCols = {
+export const authorCols = {
   code: profiles.code,
   role: profiles.role,
   name: profiles.displayName,
@@ -108,7 +127,7 @@ const authorCols = {
   avatarFileId: profiles.avatarFileId,
 };
 
-function shapeAuthor(a: {
+export function shapeAuthor(a: {
   code: string;
   role: Role;
   name: string;
@@ -213,7 +232,7 @@ function publicAd(a: typeof ads.$inferSelect) {
 }
 
 /** پاسخ‌های «پرسش تخصصی» برای همه دیده می‌شوند (بقیهٔ پاسخ‌ها خصوصی و فقط برای آگهی‌دهنده است) */
-export async function publicAnswers(adId: string) {
+export async function publicAnswers(adId: string, viewer?: User) {
   const [ad] = await db.select({ type: ads.type }).from(ads).where(eq(ads.id, adId)).limit(1);
   if (!ad) throw notFound('آگهی پیدا نشد');
   if (ad.type !== 'consult') throw badRequest('فقط پاسخ‌های پرسش تخصصی عمومی است', 'NOT_CONSULT');
@@ -225,7 +244,50 @@ export async function publicAnswers(adId: string) {
     .where(and(eq(adResponses.adId, adId), ne(adResponses.status, 'withdrawn'), eq(users.status, 'active')))
     .orderBy(adResponses.createdAt)
     .limit(200);
-  return rows.map(({ r: x, author }) => ({ id: x.id, message: x.message, createdAt: x.createdAt, best: x.status === 'accepted', author: shapeAuthor(author) }));
+  const ids = rows.map((x) => x.r.id);
+  const votes = ids.length
+    ? await db
+        .select({ id: answerVotes.responseId, up: sql<number>`count(*) filter (where ${answerVotes.value} > 0)::int`, down: sql<number>`count(*) filter (where ${answerVotes.value} < 0)::int` })
+        .from(answerVotes)
+        .where(inArray(answerVotes.responseId, ids))
+        .groupBy(answerVotes.responseId)
+    : [];
+  const mine = ids.length && viewer
+    ? await db.select({ id: answerVotes.responseId, v: answerVotes.value }).from(answerVotes).where(and(inArray(answerVotes.responseId, ids), eq(answerVotes.userId, viewer.id)))
+    : [];
+  const V = new Map(votes.map((v) => [v.id, v]));
+  const M = new Map(mine.map((v) => [v.id, v.v]));
+  const out = rows.map(({ r: x, author }) => {
+    const v = V.get(x.id);
+    const up = v?.up ?? 0, down = v?.down ?? 0;
+    return { id: x.id, message: x.message, createdAt: x.createdAt, best: x.status === 'accepted', author: shapeAuthor(author), up, down, score: up - down, myVote: M.get(x.id) ?? 0 };
+  });
+  // مرتب بر اساس امتیاز (مفید منهای نامفید)، بعد قدیمی‌تر اول
+  return out.sort((a, b) => b.score - a.score || +new Date(a.createdAt) - +new Date(b.createdAt));
+}
+
+/** رأی «مفید بود / نبود» به پاسخ پرسش تخصصی؛ value=0 یعنی برداشتن رأی */
+export async function voteAnswer(user: User, responseId: string, value: -1 | 0 | 1) {
+  const [row] = await db
+    .select({ type: ads.type, owner: profiles.userId })
+    .from(adResponses)
+    .innerJoin(ads, eq(ads.id, adResponses.adId))
+    .innerJoin(profiles, eq(profiles.id, adResponses.profileId))
+    .where(eq(adResponses.id, responseId))
+    .limit(1);
+  if (!row || row.type !== 'consult') throw notFound('پاسخ پیدا نشد');
+  if (row.owner === user.id) throw badRequest('به پاسخ خودت نمی‌توانی رأی بدهی', 'OWN_ANSWER');
+  if (value === 0) await db.delete(answerVotes).where(and(eq(answerVotes.responseId, responseId), eq(answerVotes.userId, user.id)));
+  else
+    await db
+      .insert(answerVotes)
+      .values({ responseId, userId: user.id, value })
+      .onConflictDoUpdate({ target: [answerVotes.responseId, answerVotes.userId], set: { value } });
+  const [c] = await db
+    .select({ up: sql<number>`count(*) filter (where ${answerVotes.value} > 0)::int`, down: sql<number>`count(*) filter (where ${answerVotes.value} < 0)::int` })
+    .from(answerVotes)
+    .where(eq(answerVotes.responseId, responseId));
+  return { up: c.up, down: c.down, score: c.up - c.down, myVote: value };
 }
 
 export async function getAd(id: string, viewer?: User) {
@@ -279,7 +341,8 @@ export async function respond(profile: Profile, adId: string, input: { message: 
     .limit(1);
   if (!row || row.ad.status !== 'active') throw notFound('این آگهی فعال نیست', 'AD_INACTIVE');
   if (row.ownerId === profile.userId) throw badRequest('به آگهی خودتان نمی‌توانید پاسخ دهید', 'OWN_AD');
-  if (!row.ad.audience.includes(profile.role)) {
+  // پرسش تخصصی: همهٔ کاربران واردشده می‌توانند پاسخ بدهند
+  if (row.ad.type !== 'consult' && !row.ad.audience.includes(profile.role)) {
     throw forbidden('این آگهی برای نقش فعال شما نیست؛ نقش را عوض کنید', 'NOT_AUDIENCE');
   }
   if ((await blockedIds(profile.userId)).includes(row.ownerId)) throw forbidden('امکان پاسخ به این آگهی نیست', 'BLOCKED');
