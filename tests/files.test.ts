@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { api, auth, FORMS, registered } from './helpers';
+import { multiRole, api, auth, FORMS, registered } from './helpers';
+import { beforeAll, afterAll } from 'vitest';
 
 /* فایل‌های نمونهٔ کوچک (فقط سرآیند درست کافی است) */
 function seg(marker: number, payload: Buffer) {
@@ -22,6 +23,8 @@ const PDF = Buffer.from('%PDF-1.4\n1 0 obj <<>> endobj\ntrailer <<>>\n%%EOF', 'l
 const EXE = Buffer.from('MZ\x90\0 this is not an image', 'latin1');
 
 describe('files: avatar, portfolio, documents, chat attachments', () => {
+  beforeAll(() => multiRole(true));
+  afterAll(() => multiRole(false));
   it('avatar: upload, EXIF stripped, public, replace removes old, validation', async () => {
     const w = await registered('worker');
 

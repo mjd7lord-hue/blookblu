@@ -71,6 +71,13 @@
       "when": 1790941945177,
       "tag": "0009_invites_votes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791014344482,
+      "tag": "0010_payment_receipts",
+      "breakpoints": true
     }
   ]
 }

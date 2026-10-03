@@ -1,6 +1,6 @@
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { contracts, contractSignatures, projects, users, type ContractTerms, type Milestone } from '../../db/schema';
+import { contracts, contractSignatures, projects, users, type ContractTerms, type Milestone, projectPayments } from '../../db/schema';
 import { sha256 } from '../../lib/crypto';
 import { badRequest, conflict, forbidden } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
@@ -336,7 +336,9 @@ export async function contractForPrint(id: string) {
   const [c] = await db.select().from(contracts).where(eq(contracts.id, id)).limit(1);
   if (!c) return null;
   const sigs = await signaturesOf(c);
-  return { c, sigs };
+  // پیوست: پرداخت‌های ثبت‌شده (رسید/شمارهٔ پیگیری و تأیید طرف مقابل)
+  const pays = await db.select().from(projectPayments).where(eq(projectPayments.projectId, c.projectId)).orderBy(projectPayments.paidOn);
+  return { c, sigs, pays };
 }
 
 export function assertSide(side: string, expected: 'client' | 'provider', msg: string) {

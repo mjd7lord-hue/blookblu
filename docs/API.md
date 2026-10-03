@@ -324,12 +324,17 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
 | GET | `/projects/:id/payments` | — | `{ items, summary, labels }` |
-| POST | `/projects/:id/payments` | `{ amount, label, milestoneIndex?, statementId?, paidOn?, note? }` | `amount` عدد یا «۸٬۵۵۰٬۰۰۰». `label` یکی از `labels`. `paidOn` مثل `2026-09-28` (پیش‌فرض امروز) |
+| POST | `/projects/:id/payments` | `{ amount, label, milestoneIndex?, statementId?, paidOn?, note?, trackingNo?, bank? }` | `amount` عدد یا «۸٬۵۵۰٬۰۰۰». `label` یکی از `labels`. `paidOn` مثل `2026-09-28` (پیش‌فرض امروز؛ آینده ← `FUTURE_PAYMENT`). شمارهٔ پیگیری تکراری در کل بلوک ← `DUP_TRACKING` |
+| POST | `/payments/:id/receipt` | multipart: `file` (عکس/PDF) + `trackingNo?`, `bank?` | رسید واریز؛ فقط ثبت‌کننده و تا تأیید نشده (`PAYMENT_LOCKED`). همان فایل برای پرداخت دیگر ← `DUP_RECEIPT` |
 | POST | `/payments/:id/confirm` | — | فقط طرف مقابلِ ثبت‌کننده (`OWN_PAYMENT`) |
 | POST | `/payments/:id/dispute` | `{ reason }` | |
 | DELETE | `/payments/:id` | — | فقط ثبت‌کننده و تا تأیید نشده |
 
 `summary = { total, confirmed, pending, disputed, remaining, retention, milestones: [{ index, title, pct, due, paid }] }`.
+
+هر پرداخت: `trackingNo`، `bank`، `receiptUrl` (لینک امضاشده، فقط دو طرف)، `checks` (`NO_RECEIPT`، `NO_TRACKING`، `AMOUNT_MISMATCH`، `BEFORE_PROJECT`) و `documented` (= تأییدشده + رسید یا شمارهٔ پیگیری). جدول پرداخت‌ها پیوست نسخهٔ چاپی قرارداد است.
+
+**نقش:** `settings.flags.multiRole` (پیش‌فرض خاموش) — نقش فقط یک بار هنگام ثبت‌نام؛ نقش دوم ← `403 ROLE_LOCKED`.
 
 ## صورت‌وضعیت (متره × فی)
 

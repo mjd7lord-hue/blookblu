@@ -79,6 +79,6 @@ contractPrintRouter.get(
     if (!found) throw notFound('قرارداد پیدا نشد');
     res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src-attr 'unsafe-inline'; img-src data:");
     res.setHeader('Cache-Control', 'private, no-store');
-    res.type('html').send(renderContractHtml(found.c, found.sigs));
+    res.type('html').send(renderContractHtml(found.c, found.sigs, found.pays));
   }),
 );

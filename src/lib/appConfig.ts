@@ -24,6 +24,7 @@ export const DEFAULTS = {
       autoFlag: true,
       otpVoice: false,
       maintenance: false,
+      multiRole: false, // خاموش = نقش فقط یک بار هنگام ثبت‌نام؛ تغییر با پشتیبانی
     },
     ver: { min: '1.0.0', latest: '1.0.0', force: false },
     display: { font: 'متوسط', latin: false, contrast: false, reduce: false },

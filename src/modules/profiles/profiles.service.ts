@@ -107,6 +107,11 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData)
     .where(and(eq(profiles.userId, user.id), eq(profiles.role, role)))
     .limit(1);
   if (exists) throw conflict('این نقش را قبلاً ثبت کرده‌اید', 'ROLE_EXISTS');
+  // نقش فقط یک بار، هنگام ثبت‌نام (مگر مدیر «چند نقش» را روشن کند)
+  if (!flag('multiRole')) {
+    const [other] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, user.id)).limit(1);
+    if (other) throw forbidden('نقش هنگام ثبت‌نام انتخاب می‌شود؛ برای تغییر نقش از پشتیبانی بخواه', 'ROLE_LOCKED');
+  }
   // مدیر می‌تواند ثبت‌نام یک نقش یا اتباع خارجی را موقتاً ببندد (پنل ← فهرست‌ها / تنظیمات)
   if (cfg('catalog').roles?.[role]?.on === false) throw forbidden('ثبت‌نام این نقش فعلاً بسته است', 'ROLE_DISABLED');
 

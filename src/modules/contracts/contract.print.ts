@@ -1,8 +1,9 @@
-import type { contracts, contractSignatures } from '../../db/schema';
+import type { contracts, contractSignatures, projectPayments } from '../../db/schema';
 import { faDate } from './contract.service';
 
 type Contract = typeof contracts.$inferSelect;
 type Signature = typeof contractSignatures.$inferSelect;
+type Pay = typeof projectPayments.$inferSelect;
 
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
@@ -11,7 +12,10 @@ const faDigits = (s: string) => s.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+
 const maskPhone = (p: string) => faDigits(`${p.slice(0, 4)}***${p.slice(-4)}`);
 
 /** صفحهٔ چاپی قرارداد (از مرورگر: چاپ → ذخیره به PDF) */
-export function renderContractHtml(c: Contract, sigs: Signature[]) {
+const PAY_ST = { recorded: 'منتظر تأیید طرف مقابل', confirmed: 'تأیید شد', disputed: 'اعتراض شد' } as const;
+const money = (n: number) => faDigits(n.toLocaleString('en-US').replace(/,/g, '٬'));
+
+export function renderContractHtml(c: Contract, sigs: Signature[], pays: Pay[] = []) {
   const t = c.terms;
   const sig = (side: 'client' | 'provider', label: string, name: string) => {
     const s = sigs.find((x) => x.side === side);
@@ -38,6 +42,7 @@ export function renderContractHtml(c: Contract, sigs: Signature[]) {
   .st { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: ${c.status === 'active' ? '#dcfce7;color:#166534' : '#fef3c7;color:#92400e'}; }
   h2 { font-size: 15px; margin: 18px 0 4px; }
   p { margin: 0; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; } td, th { border: 1px solid #e5e7eb; padding: 5px 6px; text-align: right; } th { background: #f9fafb; }
   .sigs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 28px; }
   .sig { border: 1px dashed #9ca3af; border-radius: 8px; padding: 12px; min-height: 90px; font-size: 13px; }
   .sig.on { border: 1.5px solid #0f766e; background: #f0fdfa; }
@@ -50,6 +55,10 @@ export function renderContractHtml(c: Contract, sigs: Signature[]) {
 <main class="paper">
   <header><div><h1>قرارداد همکاری در بلوک</h1><small>شمارهٔ ${esc(t.number)} · ${esc(t.dateFa)} · نسخهٔ ${faDigits(String(c.version))}</small></div><span class="st">${status}</span></header>
   ${t.clauses.map((cl, i) => `<h2>مادهٔ ${faDigits(String(i + 1))} · ${esc(cl.title)}</h2><p>${nl(cl.text)}</p>`).join('\n  ')}
+  ${pays.length ? `<h2>پیوست · پرداخت‌های ثبت‌شده در بلوک</h2>
+  <p>هر پرداخت را یک طرف با رسید یا شمارهٔ پیگیری بانک ثبت و طرف دیگر رسیدن پول را تأیید کرده است.</p>
+  <table><tr><th>تاریخ</th><th>بابت</th><th>مبلغ (تومان)</th><th>شمارهٔ پیگیری</th><th>رسید</th><th>وضعیت</th></tr>
+  ${pays.map((x) => `<tr><td>${faDigits(x.paidOn)}</td><td>${esc(x.label)}</td><td>${money(x.amount)}</td><td dir="ltr">${esc(x.trackingNo || '—')}</td><td>${x.receiptFileId ? 'پیوست شده' : '—'}</td><td>${PAY_ST[x.status]}</td></tr>`).join('')}</table>` : ''}
   <div class="sigs">${sig('client', 'کارفرما', t.client.name)}${sig('provider', 'مجری', t.provider.name)}</div>
   <footer>این قرارداد با کد یک‌بارمصرف پیامکی به موبایل هر طرف امضا شده است. اثر انگشت متن (SHA-256): ${esc(c.contentHash)}<br>
   قرارداد بلوک یک نمونهٔ استاندارد است؛ برای کارهای بزرگ متن را با مشاور حقوقی هم بررسی کنید. بلوک طرف قرارداد و واسطهٔ مالی نیست.</footer>

@@ -3,7 +3,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '../src/db';
 import { documents, users } from '../src/db/schema';
 import { recomputeVerified } from '../src/modules/admin/admin.service';
-import { api, auth, registered } from './helpers';
+import { api, auth, registered , multiRole } from './helpers';
+import { beforeAll, afterAll } from 'vitest';
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9]);
 const PDF = Buffer.from('%PDF-1.4\n%%EOF', 'latin1');
@@ -21,6 +22,8 @@ const sendKyc = (token: string, fields: Record<string, string> = {}) => {
 };
 
 describe('KYC and admin panel', () => {
+  beforeAll(() => multiRole(true));
+  afterAll(() => multiRole(false));
   it('KYC: submit → admin reviews with signed images → verified, name locked, images removed', async () => {
     const w = await registered('worker');
     const adm = await admin();

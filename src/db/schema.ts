@@ -461,7 +461,7 @@ export const projects = pgTable(
 
 /* ================= فاز ۳: فایل‌ها (عکس پروفایل، نمونه‌کار، مدارک، عکس چت) ================= */
 
-export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat', 'kyc', 'project', 'arbitration'] as const;
+export const FILE_PURPOSES = ['avatar', 'portfolio', 'document', 'chat', 'kyc', 'project', 'arbitration', 'receipt'] as const;
 export const filePurposeEnum = pgEnum('file_purpose', FILE_PURPOSES);
 export const documentStatusEnum = pgEnum('document_status', ['pending', 'approved', 'rejected']);
 
@@ -663,9 +663,19 @@ export const projectPayments = pgTable(
     status: paymentStatusEnum('status').notNull().default('recorded'),
     disputeReason: text('dispute_reason'),
     respondedAt: ts('responded_at'),
+    // رسید واریز (عکس یا اسکرین‌شات) + شمارهٔ پیگیری بانک؛ برای جلوگیری از رسید تکراری/جعلی
+    receiptFileId: uuid('receipt_file_id').references((): AnyPgColumn => files.id, { onDelete: 'set null' }),
+    receiptHash: varchar('receipt_hash', { length: 64 }),
+    trackingNo: varchar('tracking_no', { length: 40 }),
+    bank: varchar('bank', { length: 40 }),
+    checks: jsonb('checks').$type<string[]>(),
     createdAt: createdAt(),
   },
-  (t) => [index('payments_project_idx').on(t.projectId, t.paidOn)],
+  (t) => [
+    index('payments_project_idx').on(t.projectId, t.paidOn),
+    uniqueIndex('payments_tracking_uq').on(t.trackingNo).where(sql`tracking_no is not null`),
+    uniqueIndex('payments_receipt_hash_uq').on(t.receiptHash).where(sql`receipt_hash is not null`),
+  ],
 );
 
 export type StatementItem = {

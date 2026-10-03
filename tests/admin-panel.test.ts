@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '../src/db';
 import { users } from '../src/db/schema';
-import { api, auth, login, registered, FORMS } from './helpers';
+import { multiRole, api, auth, login, registered, FORMS } from './helpers';
+import { beforeAll, afterAll } from 'vitest';
 
 async function owner() {
   const a = await registered('general');
@@ -11,6 +12,8 @@ async function owner() {
 }
 
 describe('admin panel: roles, permissions, province scope, snapshot', () => {
+  beforeAll(() => multiRole(true));
+  afterAll(() => multiRole(false));
   it('owner sees everything; legacy is_admin becomes owner automatically', async () => {
     const o = await owner();
     const me = await api().get('/api/admin/panel/me').set(auth(o.token));

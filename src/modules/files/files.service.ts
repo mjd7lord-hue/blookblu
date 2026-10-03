@@ -27,6 +27,8 @@ const RULES: Record<FilePurpose, { mimes: readonly string[]; maxBytes: number; i
   project: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
   // عکس‌های گزارش بازدید داوری — فقط دو طرف پروژه (با projectId) و با لینک امضاشده برای حل‌کننده
   arbitration: { mimes: IMAGE_MIMES, maxBytes: 10 * MB, isPublic: false },
+  // رسید واریز (اسکرین‌شات یا عکس، یا PDF بانک) — فقط دو طرف پروژه با لینک امضاشده
+  receipt: { mimes: [...IMAGE_MIMES, 'application/pdf'], maxBytes: 10 * MB, isPublic: false },
 };
 export const MAX_UPLOAD_BYTES = 10 * MB;
 

@@ -75,3 +75,13 @@ export async function makeProject() {
   const pid = acc.body.project.id as string;
   return { boss, w, cid, pid };
 }
+
+/** «چند نقش» برای تست‌هایی که عمداً نقش دوم می‌سازند (پیش‌فرض: خاموش = نقش فقط هنگام ثبت‌نام) */
+export async function multiRole(on: boolean) {
+  const { cfg, saveConfig } = await import('../src/lib/appConfig');
+  const { db } = await import('../src/db');
+  const { users } = await import('../src/db/schema');
+  const [u] = await db.select({ id: users.id }).from(users).limit(1);
+  const s = cfg('settings');
+  await saveConfig('settings', { ...s, flags: { ...s.flags, multiRole: on } }, u.id);
+}
