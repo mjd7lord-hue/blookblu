@@ -1,7 +1,8 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { api, auth, FORMS, login, multiRole, registered } from './helpers';
 
 describe('role registration & profiles', () => {
+  beforeAll(() => multiRole(true));
   afterAll(() => multiRole(false));
   it('registers every role with its own form', async () => {
     for (const role of ['worker', 'contractor', 'engineer', 'general', 'company'] as const) {
@@ -41,10 +42,12 @@ describe('role registration & profiles', () => {
   });
 
   it('role is chosen once at sign-up: second role is locked unless the panel enables multi-role', async () => {
+    await multiRole(false);
     const u = await registered('worker');
     const r = await api().post('/api/me/roles').set(auth(u.token)).send({ role: 'contractor', data: FORMS.contractor });
     expect(r.status).toBe(403);
     expect(r.body.error.code).toBe('ROLE_LOCKED');
+    await multiRole(true);
   });
 
   it('multi-role: add second role, switch, week, public view hides private data', async () => {

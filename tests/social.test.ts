@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { api, auth, login, registered } from './helpers';
+import { api, auth, login, registered , multiRole } from './helpers';
+import { beforeAll, afterAll } from 'vitest';
 
 describe('saved, guarantees, blocks, reports, meta', () => {
+  beforeAll(() => multiRole(true));
+  afterAll(() => multiRole(false));
   it('saves ads and profiles', async () => {
     const u = await registered('general');
     const w = await registered('worker');
