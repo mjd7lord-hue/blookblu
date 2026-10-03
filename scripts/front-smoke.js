@@ -366,8 +366,8 @@ async function register(w, role, data) {
   const DOCSEL = 'button[onclick="go(\'docs\')"] .blk-red';
   // بخش ۵: راهنمای امتیاز، نشان مدارک ناقص، راهنمای قرارداد، شهر کشویی، سال تولد
   ev(B, "openTrust('me')");
-  await until(() => ev(B, "S.cur==='profile'") && B.document.querySelector('#pvScore[open] .tstep'), 'trust steps');
-  log('پروفایل و شناسنامه یک صفحه؛ «امتیاز از کجا آمده» باز شد با', B.document.querySelectorAll('#pvScore .tstep').length, 'قدم ·', B.document.querySelector('#pvScore .tstep b').textContent);
+  await until(() => B.document.querySelector('#blkSteps'), 'trust steps');
+  log('شناسنامهٔ کاری · راهنمای بالا بردن امتیاز:', B.document.querySelectorAll('#blkSteps .tstep').length, 'قدم ·', B.document.querySelector('#blkSteps .tstep b').textContent);
   ev(B, "go('me')");
   await until(() => B.document.querySelector(DOCSEL), 'docs red badge');
   ev(B, "go('docs')");
