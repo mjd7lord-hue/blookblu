@@ -314,7 +314,7 @@ async function register(w, role, data) {
   await until(() => ev(C, "S.cur==='arbj' && S.arbQ2 && document.querySelector('#s-arbj .arbj-up')"), 'arbiter form');
   C.LIVE.arbDoc = mkFile(C, 'nezam.pdf', 'application/pdf', PDFB);
   ev(C, 'S.arbQ2.doc=true;S.arbQ2.pledge=true;arbJoin()');
-  await until(() => ev(C, 'S.arbMe && S.arbMe.st') === 'review', 'arbiter applied');
+  await until(() => ev(C, 'S.arbMe && S.arbMe.st') === 'review', 'arbiter applied', 15000).catch((e) => { throw new Error(e.message + ' · ' + C.document.getElementById('toast').textContent + ' · ' + ev(C, 'JSON.stringify(S.arbQ2)')); });
   log('مهندس درخواست حل‌کنندگی داد؛ وضعیت: در حال بررسی · حوزه‌ها', ev(C, 'S.arbMe.fields.join(",")'));
 
   /* ---------- بخش ۴: بازدید مهندس، تیم، پشتیبانی، آکادمی، استوری و قوانین ---------- */

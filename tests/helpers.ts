@@ -6,7 +6,12 @@ export const api = () => request(app);
 
 let n = 0;
 /** شمارهٔ یکتا برای هر تست */
-export const nextPhone = () => '0912' + String(1000000 + ++n + Math.floor(Math.random() * 1000) * 1000).slice(-7);
+const used = new Set<string>();
+export const nextPhone = (): string => {
+  // ۷ رقم تصادفی (قبلاً فقط ۱۰ حالت داشت و بین فایل‌های تست تکراری می‌شد)
+  const p = '0912' + String(1_000_000 + ((Date.now() * 7 + ++n * 7919 + Math.floor(Math.random() * 9_000_000)) % 9_000_000));
+  return used.has(p) ? nextPhone() : (used.add(p), p);
+};
 
 export async function login(phone = nextPhone()) {
   const s = await api().post('/api/auth/otp/send').send({ phone });
