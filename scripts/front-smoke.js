@@ -199,13 +199,16 @@ async function register(w, role, data) {
   await until(() => ev(B, "S.cur==='pdet'"), 'project page B');
   ev(B, "addPay(S.role+':0')");
   ev(B, "document.getElementById('payA').value='۲٬۰۰۰٬۰۰۰'");
+  ev(B, `document.getElementById('payT').value='${String(Date.now()).slice(-10)}'`);
   click(B, '#sb .cta');
   await until(() => ev(B, "(S.pays[S.role+':0']||[]).length") === 1, 'payment recorded');
   ev(A, 'openProjPage(0)');
   await until(() => ev(A, "S.cur==='pdet' && document.querySelector('#s-pdet [data-act=confirm]')"), 'confirm button');
   click(A, '#s-pdet [data-act=confirm]');
+  await until(() => A.document.getElementById('pyGo'), 'confirm receipt sheet');
+  ev(A, "document.getElementById('pyOk').checked=true;document.getElementById('pyGo').click()");
   await until(() => ev(A, "S.pays[S.role+':0'][0]._x.status") === 'confirmed', 'payment confirmed');
-  log('دفترچهٔ پرداخت: ثبت مجری و تأیید کارفرما —', ev(A, "S.pays[S.role+':0'][0].f"));
+  log('دفترچهٔ پرداخت: ثبت با شمارهٔ پیگیری، بررسی و تأیید دریافت —', ev(A, "S.pays[S.role+':0'][0].f"), '· مستند:', ev(A, "S.pays[S.role+':0'][0]._x.documented"));
 
   // شروع کار
   ev(B, 'advProj(0)');
@@ -390,16 +393,15 @@ async function register(w, role, data) {
   ev(A, 'S.q=""');
 
   ev(A, `collabReq('${codeB}')`);
-  await until(() => A.document.getElementById('crT') || A.document.querySelector('#crW .chip'), 'collab sheet');
-  ev(A, "S.cr.pick='new';document.getElementById('crT').value='بتن‌ریزی سقف ویلای طولا';document.getElementById('crO').value='۲٬۲۰۰٬۰۰۰ تومان روزانه';collabSend()");
-  await until(() => /درخواست همکاری فرستاده شد/.test((A.document.getElementById('sheetTitle') || {}).textContent || ''), 'collab confirm page');
-  log('درخواست همکاری ← صفحهٔ تأیید:', A.document.querySelector('.rd-where').textContent, '·', A.document.querySelectorAll('.rd-next li').length, 'قدم بعدی');
-  ev(B, "LIVE.loaded.req=0;S.rtab='in';S.rk='collab';go('req')");
-  await until(() => ev(B, "(S.req[S.role]||[]).some(r=>r._inv&&!r.st)"), 'invite in requests center');
-  log('مرکز درخواست‌ها (دریافتی، همکاری):', ev(B, "document.querySelector('#s-req .rq b').textContent"));
-  ev(B, "rqAct('in',(S.req[S.role]||[]).findIndex(r=>r._inv&&!r.st),'ok')");
-  await until(() => ev(B, "S.cur==='chat'"), 'accept invite → chat');
-  log('قبول درخواست همکاری ← چت باز شد:', ev(B, "convName(S.convs.find(c=>c.id===S.cid))"));
+  await until(() => ev(A, "S.cur==='chat'") && (A.document.getElementById('cIn') || {}).value, 'collab → chat with draft');
+  log('پیشنهاد کار در چت ← پیام آماده:', A.document.getElementById('cIn').value.slice(0, 40) + '…');
+  ev(A, "sendText(document.getElementById('cIn').value)");
+  await until(() => ev(A, "S.convs.find(c=>c.id===S.cid).msgs.some(m=>m.me&&m.id&&/وقت داری/.test(m.t||''))"), 'draft sent');
+  const acid = ev(A, 'S.cid');
+  await ev(B, 'LIVE.loadConvs()');
+  ev(B, `openChat('${acid}')`);
+  await until(() => ev(B, "S.cur==='chat'"), 'B opens chat');
+  log('کارگر چت را باز کرد:', ev(B, "convName(S.convs.find(c=>c.id===S.cid))"));
 
   // قرارداد از داخل چت: دکمهٔ «ثبت قرارداد» و ۳ گام
   if (!B.document.querySelector('#s-chat .qr-ctr')) throw new Error('دکمهٔ «ثبت قرارداد» در چت نیست');
