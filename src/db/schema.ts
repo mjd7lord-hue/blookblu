@@ -1165,3 +1165,52 @@ export const answerVotes = pgTable(
   },
   (t) => [primaryKey({ columns: [t.responseId, t.userId] })],
 );
+
+/* ================= دور ۳۰: نیروی فوری ================= */
+// کارفرما یک درخواست می‌فرستد؛ به نیروهای «آماده به کار» (آگهی work فعال) همان استان و مهارت می‌رسد؛ اولین قبول‌کننده‌ها برنده‌اند
+export const urgentStatusEnum = pgEnum('urgent_status', ['open', 'filled', 'cancelled', 'expired']);
+export const urgentOfferStatusEnum = pgEnum('urgent_offer_status', ['sent', 'accepted', 'declined', 'missed']);
+
+export const urgentRequests = pgTable(
+  'urgent_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientProfileId: uuid('client_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 120 }).notNull(),
+    skill: varchar('skill', { length: 60 }),
+    roles: roleEnum('roles').array().notNull(),
+    needCount: smallint('need_count').notNull().default(1),
+    province: varchar('province', { length: 60 }).notNull(),
+    city: varchar('city', { length: 60 }).notNull(),
+    startWhen: varchar('start_when', { length: 60 }).notNull(),
+    dailyWage: bigint('daily_wage', { mode: 'number' }).notNull(), // تومان
+    days: smallint('days').notNull().default(1),
+    note: text('note'),
+    status: urgentStatusEnum('status').notNull().default('open'),
+    sentCount: smallint('sent_count').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('urgent_client_idx').on(t.clientProfileId, t.status)],
+);
+
+export const urgentOffers = pgTable(
+  'urgent_offers',
+  {
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => urgentRequests.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    adId: uuid('ad_id').references(() => ads.id, { onDelete: 'set null' }),
+    status: urgentOfferStatusEnum('status').notNull().default('sent'),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    respondedAt: ts('responded_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.requestId, t.profileId] }), index('urgent_offers_profile_idx').on(t.profileId, t.status)],
+);

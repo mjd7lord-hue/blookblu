@@ -16,7 +16,7 @@ describe('invites, answer votes, code search, free ad limit', () => {
     await api().patch(`/api/ads/${a1.body.ad.id}`).set(auth(c.token)).send({ status: 'closed' }).expect(200);
     await api().post('/api/ads').set(auth(c.token)).send(job('کارگر ساده برای خاک‌برداری')).expect(201);
     const cfg = await api().get('/api/app/config');
-    expect(cfg.body.limits).toEqual({ freeAds: 1 });
+    expect(cfg.body.limits).toEqual({ freeAds: 1, urgentHours: 3, urgentMaxSend: 30, urgentOpen: 3 });
   });
 
   it('cooperation invite: send (single + bulk), list in/out, accept, withdraw, duplicate', async () => {

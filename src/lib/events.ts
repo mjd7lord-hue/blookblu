@@ -10,7 +10,7 @@ bus.setMaxListeners(0);
 
 // فاز ۵: contract (امضا/ویرایش)، payment، statement، daily (گزارش روزانه)
 export type LiveEvent = {
-  type: 'message' | 'conversation' | 'read' | 'project' | 'notification' | 'contract' | 'payment' | 'statement' | 'daily';
+  type: 'message' | 'conversation' | 'read' | 'project' | 'notification' | 'contract' | 'payment' | 'statement' | 'daily' | 'urgent';
   data: unknown;
 };
 

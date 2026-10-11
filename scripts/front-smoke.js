@@ -35,6 +35,7 @@ const html = fs
   .replace('<script src="live-projects.js"></script>', inline('live-projects.js'))
   .replace('<script src="live-more.js"></script>', inline('live-more.js'))
   .replace('<script src="work.js"></script>', inline('work.js'))
+  .replace('<script src="urgent.js"></script>', inline('urgent.js'))
   .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
@@ -459,13 +460,40 @@ async function register(w, role, data) {
   // برآورد ← نیروی این پروژه (حمام)؛ آگهی فعال دیگری هست ← فقط درخواست‌ها
   ev(A, "go('est');estType('bath');estGo()");
   await until(() => ev(A, "S.cur==='estgo'") && A.document.getElementById('egT'), 'estimate → workforce page');
-  await until(() => ev(A, `!!P['${codeB}'] && egCands().some(c=>c.id==='${codeB}')`), 'candidates');
+  await until(() => ev(A, `!!P['${codeB}'] && egCands().some(c=>c.id==='${codeB}')`), 'candidates').catch((e) => { throw new Error(e.message + ' · P? ' + ev(A, `!!P['${codeB}']`) + ' · ' + JSON.stringify(ev(A, "egCands().map(c=>c.id).slice(0,8)")) + ' · role ' + ev(A,`P['${codeB}']&&[P['${codeB}'].role,P['${codeB}'].place,P['${codeB}'].week]`)); });
   log('برآورد ← آگهی آماده:', ev(A, "document.getElementById('egT').value"), '· نقش‌ها:', ev(A, "S.eg.roles.map(r=>ROLES[r].n).join('، ')"));
   ev(A, `egPick('${codeB}');estPublish()`);
   await until(() => /درخواست/.test((A.document.getElementById('sheetTitle') || {}).textContent || ''), 'estimate publish');
   const inv = await ev(B, "LIVE.api('GET','/invites?dir=in')");
   log('«انتشار و ارسال»:', A.document.getElementById('sheetTitle').textContent, '· درخواست‌های کارگر:', inv.items.length);
   ev(A, 'closeSheet()');
+
+  // نیروی فوری: کارگر «آماده به کار» است ← پیمانکار درخواست فوری می‌فرستد ← کارگر قبول می‌کند ← پروژه
+  const UGS = 'سنگ‌کاری ' + String(Date.now()).slice(-5); // یکتا: دیتابیس تست بین اجراها می‌ماند
+  await ev(B, `LIVE.api('POST','/ads',{type:'work',title:'سنگ‌کار آماده به کار',province:'هرمزگان',city:'قشم',wageType:'روزانه',wageAmount:'2000000',startWhen:'فوری',range:'city',audience:['contractor','general'],skills:['${UGS}']})`)
+    .catch(async () => {
+      // آگهی رایگان پر است ← آگهی‌های قبلی کارگر بسته شود
+      const m = await ev(B, "LIVE.api('GET','/ads/mine')");
+      for (const a of m.items.filter((x) => x.status === 'active')) await ev(B, `LIVE.api('PATCH','/ads/${'${a.id}'}',{status:'closed'})`.replace("${a.id}", a.id));
+      return ev(B, `LIVE.api('POST','/ads',{type:'work',title:'سنگ‌کار آماده به کار',province:'هرمزگان',city:'قشم',wageType:'روزانه',wageAmount:'2000000',startWhen:'فوری',range:'city',audience:['contractor','general'],skills:['${UGS}']})`);
+    });
+  ev(A, "go('home')");
+  await until(() => A.document.querySelector('#ugBtnSec .ug-btn'), 'urgent button on home');
+  ev(A, 'urgSheet()');
+  await until(() => A.document.getElementById('ugW'), 'urgent sheet');
+  ev(A, `S.ugf.skill='${UGS}';document.getElementById('ugT').value='سنگ‌کاری نمای ویلا';const w=document.getElementById('ugW');w.value='2500000';w.dispatchEvent(new Event('input',{bubbles:true}));urgSet('days',1)`);
+  await until(() => /به ۱ نیروی آماده/.test((A.document.getElementById('ugCnt') || {}).textContent || ''), 'urgent preview count').catch(async (e) => { throw new Error(e.message + ' · ' + A.document.getElementById('ugCnt').textContent + ' · ' + JSON.stringify(await ev(B, "LIVE.api('GET','/ads/mine')").then(d=>d.items.map(x=>[x.type,x.status,x.province,x.skills])))+' · A '+JSON.stringify(ev(A,'[S.role,S.ugf]'))); });
+  ev(A, 'urgSend()');
+  await until(() => ev(A, "S.cur==='urg' && S.ug.mine.length && S.ug.mine[0].status==='open'"), 'urgent sent');
+  await sleep(5200);
+  ev(B, "go('home')");
+  await until(() => ev(B, 'S.ug.inbox && S.ug.inbox.length === 1') && B.document.getElementById('ugYes'), 'worker urgent offer');
+  click(B, '#ugYes');
+  await until(() => ev(B, "S.cur==='chat'"), 'urgent accepted → chat');
+  await until(async () => { await ev(A, "LIVE.api('GET','/urgent/mine').then(d=>{S.ug.mine=d.items})"); return ev(A, "S.ug.mine[0].status") === 'filled'; }, 'urgent filled');
+  ev(A, "go('urg')");
+  await until(() => /نیروهای تو/.test(A.document.getElementById('s-urg').textContent), 'urgent page shows worker');
+  log('نیروی فوری: درخواست ← کارگر آماده قبول کرد ← پروژه:', ev(A, "S.ug.mine[0].title"), '·', ev(A, "S.ug.mine[0].accepted[0].person.name"), '· پروژه', !!ev(A, 'S.ug.mine[0].accepted[0].projectId'));
 
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));

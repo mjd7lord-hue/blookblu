@@ -554,3 +554,19 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | PATCH | `/invites/:id` | `{ status: accepted\|rejected }` | فقط گیرنده؛ پیام سیستمی در چت + اعلان به فرستنده |
 | POST | `/invites/:id/withdraw` | — | پس گرفتن (فقط فرستنده، فقط در انتظار) |
 
+
+## نیروی فوری: `/api/urgent` 🔒
+
+کارفرما یک درخواست می‌فرستد ← به نیروهای «آماده به کار» (آگهی `work` فعال) همان استان و مهارت می‌رسد (اعلان «⚡ کار فوری» + رویداد SSE `urgent`). اولین‌ها که قبول کنند برنده‌اند.
+
+| متد | مسیر | بدنه / کوئری | توضیح |
+|---|---|---|---|
+| GET | `/urgent/preview` 👤 | `?roles=worker,specialist&skill=&province=&city=` | `{ count, sameCity }` — چند نیروی آماده درخواست را می‌بینند |
+| POST | `/urgent` 👤 | `{ title, skill?, roles: ['worker'\|'specialist'], needCount(1-10), startWhen, dailyWage, days(1-60), note?, province?, city? }` | فقط کارفرما/پیمانکار/شرکت/مهندس (`NOT_CLIENT`). محل پیش‌فرض = پروفایل. بدون نیروی آماده ← `NO_READY`؛ بیش از `limits.urgentOpen` درخواست باز ← `URGENT_LIMIT`. پاسخ `{ request (+total), sentCount }` |
+| GET | `/urgent/mine` | — | درخواست‌های من: `status` (open/filled/cancelled/expired)، `counts {sent, accepted, declined, waiting}`، `accepted[] {person, conversationId, projectId}` |
+| GET | `/urgent/inbox` | — | پیشنهادهای باز برای من: `{ id, title, city, startWhen, dailyWage, days, total, needCount, expiresAt, client }` |
+| POST | `/urgent/:id/accept` | — | اگر جا هست: گفت‌وگو (روی آگهی آمادگی) + توافق از طرف کارفرما با همان شرایط + پذیرش ← پروژه (و آگهی آمادگی خاموش). `{ conversationId, projectId, filled }`. پر شده/بسته ← `URGENT_CLOSED` («دیر رسیدی»)؛ جواب داده ← `ALREADY_ANSWERED` |
+| POST | `/urgent/:id/decline` | — | رد |
+| POST | `/urgent/:id/cancel` | — | لغو توسط کارفرما؛ پیشنهادهای بی‌جواب بسته می‌شوند |
+
+تنظیمات (`app_config.limits`): `urgentHours` (اعتبار، پیش‌فرض ۳)، `urgentMaxSend` (حداکثر گیرنده، ۳۰)، `urgentOpen` (درخواست باز هر کارفرما، ۳). انقضا هنگام خواندن اعمال می‌شود.

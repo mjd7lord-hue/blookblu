@@ -33,6 +33,7 @@ import appContentRoutes from './modules/content/content.routes';
 import teamRoutes from './modules/team/team.routes';
 import statsRoutes from './modules/profiles/stats.routes';
 import inviteRoutes from './modules/invites/invites.routes';
+import urgentRoutes from './modules/urgent/urgent.routes';
 import visitRoutes from './modules/visits/visits.routes';
 import { cfg, configReady } from './lib/appConfig';
 import { countRequests } from './lib/metrics';
@@ -111,6 +112,7 @@ export function createApp() {
   app.use('/api/admin/panel', panelMoreRoutes);
   app.use('/api/visits', visitRoutes);
   app.use('/api/invites', inviteRoutes);
+  app.use('/api/urgent', urgentRoutes);
   app.use('/api/events', eventsRoutes);
   app.use('/api/guarantees', guaranteesRouter);
   app.use('/api/notifications', notificationRoutes);
