@@ -36,6 +36,7 @@ const html = fs
   .replace('<script src="live-more.js"></script>', inline('live-more.js'))
   .replace('<script src="work.js"></script>', inline('work.js'))
   .replace('<script src="urgent.js"></script>', inline('urgent.js'))
+  .replace('<script src="explore.js"></script>', inline('explore.js'))
   .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
@@ -494,6 +495,23 @@ async function register(w, role, data) {
   ev(A, "go('urg')");
   await until(() => /نیروهای تو/.test(A.document.getElementById('s-urg').textContent), 'urgent page shows worker');
   log('نیروی فوری: درخواست ← کارگر آماده قبول کرد ← پروژه:', ev(A, "S.ug.mine[0].title"), '·', ev(A, "S.ug.mine[0].accepted[0].person.name"), '· پروژه', !!ev(A, 'S.ug.mine[0].accepted[0].projectId'));
+
+  // آماده به کار: بعد از قرارداد خاموش شد ← کارگر از خانه ویرایش و روشن می‌کند ← کارفرما در کاوش می‌بیند
+  ev(B, "closeSheet();go('home')");
+  await until(() => ev(B, "!!myReady() && myReady().st==='closed'") && B.document.querySelector('#rdSec .rd-prev'), 'ready card (closed after contract)').catch(async (e) => { throw new Error(e.message + ' · ' + JSON.stringify(ev(B, "[S.cur,S.role,ADS.filter(a=>a.who==='me').map(a=>[a.type,a.st]),!!document.getElementById('rdSec')]")) + ' · server ' + JSON.stringify((await ev(B, "LIVE.api('GET','/ads/mine')")).items.map((x) => [x.type, x.status])) + ' · rd ' + ev(B, 'renderHome._rd') + ' · afterLoad ' + JSON.stringify(await ev(B, "LIVE.loadMyAds(true).then(()=>ADS.filter(a=>a.who==='me').map(a=>[a.type,a.st,!!a._mine]))"))); });
+  ev(B, 'readySheet()');
+  await until(() => B.document.getElementById('rsW'), 'ready edit sheet');
+  ev(B, "const w=document.getElementById('rsW');w.value='2800000';w.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('rsX').value='ابزار کامل دارم';document.getElementById('rsGo').click()");
+  await until(async () => { const m = await ev(B, "LIVE.api('GET','/ads/mine')"); const a = m.items.find((x) => x.type === 'work'); return a && a.wageAmount === 2800000 && a.description === 'ابزار کامل دارم'; }, 'ready ad edited on server');
+  await until(() => ev(B, "!B_SHEET_OPEN()".replace('B_SHEET_OPEN()', "document.getElementById('sheet').classList.contains('on')")), 'edit sheet closed');
+  ev(B, 'readyToggle()');
+  await until(async () => (await ev(B, "LIVE.api('GET','/ads/mine')")).items.find((x) => x.type === 'work').status === 'active', 'ready ad switched on');
+  const readyId = (await ev(B, "LIVE.api('GET','/ads/mine')")).items.find((x) => x.type === 'work').id;
+  ev(A, "LIVE.loaded['ads:work']=0;S.provF=null;S.cat=null;S.cityF=null;go('explore');setMode('workers')");
+  await until(() => ev(A, `listFor().some(x=>x.a.id==='${readyId}')`) && A.document.querySelector(`#s-explore .acard[data-id="${readyId}"] .rd-type`), 'employer sees ready worker in explore');
+  ev(B, "go('explore');setMode('workers')");
+  await until(() => B.document.getElementById('rdMine'), 'worker sees own pinned card');
+  log('آماده به کار: ویرایش (۲.۸۰۰.۰۰۰ روزانه) و روشن شد ← کارفرما در کاوش با نشان سبز می‌بیند؛ کارگر «این تویی» بالای کاوش');
 
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));
