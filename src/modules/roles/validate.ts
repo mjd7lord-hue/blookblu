@@ -34,8 +34,10 @@ function checkField(f: Field, raw: unknown): { value?: unknown; error?: string }
       return { error: `${f.label}: یکی از گزینه‌ها را انتخاب کنید` };
     }
     case 'multi': {
-      if (!Array.isArray(raw)) return { error: `${f.label}: فهرست گزینه‌ها لازم است` };
-      const vals = [...new Set(raw.map(cleanStr).filter(Boolean))];
+      // دادهٔ قدیمی تک‌گزینه‌ای (مثل رشتهٔ مهندس پیش از چندرشته‌ای) هم قبول است
+      const arr = typeof raw === 'string' ? [raw] : raw;
+      if (!Array.isArray(arr)) return { error: `${f.label}: فهرست گزینه‌ها لازم است` };
+      const vals = [...new Set(arr.map(cleanStr).filter(Boolean))];
       if (f.max && vals.length > f.max) return { error: `${f.label}: حداکثر ${f.max} مورد` };
       for (const v of vals) {
         const ok = f.opts?.includes(v) || (f.custom && v.length >= 2 && v.length <= 40);

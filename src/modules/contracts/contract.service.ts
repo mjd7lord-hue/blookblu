@@ -1,4 +1,5 @@
 import { and, eq, ne, sql } from 'drizzle-orm';
+import { faMoney } from '../../lib/text';
 import { db } from '../../db';
 import { contracts, contractSignatures, projects, users, type ContractTerms, type Milestone, projectPayments } from '../../db/schema';
 import { sha256 } from '../../lib/crypto';
@@ -21,7 +22,7 @@ export const faDate = (d: Date) =>
   new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: TZ }).format(d);
 const jalaliYear = (d: Date) =>
   new Intl.DateTimeFormat('en-US-u-ca-persian-nu-latn', { year: 'numeric', timeZone: TZ }).formatToParts(d).find((p) => p.type === 'year')!.value;
-export const faNum = (n: number) => n.toLocaleString('fa-IR');
+export const faNum = (n: number) => (Number.isInteger(n) ? faMoney(n) : n.toLocaleString('fa-IR'));
 
 /** JSON با ترتیب ثابت کلیدها (jsonb ترتیب را عوض می‌کند؛ هش باید پایدار باشد) */
 export function canonicalJson(v: unknown): string {

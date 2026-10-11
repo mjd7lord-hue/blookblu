@@ -149,7 +149,7 @@ export const REG: Record<Role, Step[]> = {
     {
       title: 'رشته و پایه',
       f: [
-        { k: 'field', t: 'chips', label: 'رشته', req: true, custom: true, opts: ['عمران', 'معماری', 'تأسیسات مکانیکی', 'تأسیسات برقی', 'نقشه‌برداری', 'شهرسازی', 'ترافیک'] },
+        { k: 'field', t: 'multi', max: 3, label: 'رشته (تا ۳ رشته)', req: true, custom: true, opts: ['عمران', 'معماری', 'تأسیسات مکانیکی', 'تأسیسات برقی', 'نقشه‌برداری', 'شهرسازی', 'ترافیک'] },
         { k: 'grade', t: 'chips', label: 'پایهٔ پروانه', req: true, opts: ['پایه ۳', 'پایه ۲', 'پایه ۱', 'ارشد', 'هنوز پروانه ندارم'] },
         { k: 'nezam', t: 'text', label: 'شمارهٔ عضویت نظام مهندسی', show: noLicense },
         { k: 'nprov', t: 'prov', label: 'استان سازمان نظام مهندسی', show: noLicense },

@@ -47,9 +47,9 @@ export const FORMS = {
   },
 };
 
-export async function registered(role: keyof typeof FORMS) {
+export async function registered(role: keyof typeof FORMS, over: Record<string, unknown> = {}) {
   const u = await login();
-  const r = await api().post('/api/me/roles').set(auth(u.token)).send({ role, data: FORMS[role] });
+  const r = await api().post('/api/me/roles').set(auth(u.token)).send({ role, data: { ...FORMS[role], ...over } });
   if (r.status !== 201) throw new Error('register failed ' + JSON.stringify(r.body));
   return { ...u, profile: r.body.profile };
 }

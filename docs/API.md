@@ -148,13 +148,17 @@
 ```json
 {
   "job": "آرماتوربندی سقف دوم", "qty": "حدود ۳ تن",
-  "price": "۹٬۵۰۰٬۰۰۰ تومان هر تن", "amount": "۲۸٬۵۰۰٬۰۰۰",
+  "price": "۹.۵۰۰.۰۰۰ تومان هر تن", "amount": "۲۸.۵۰۰.۰۰۰",
   "start": "دوشنبه ۶ مهر، ۷ صبح", "durationDays": 3,
   "plan": [{ "title": "پیش‌پرداخت", "pct": 30 }, { "title": "پایان کار", "pct": 70 }],
-  "retentionPct": 10
+  "retentionPct": 10,
+  "steps": ["واحد ۱", "واحد ۲", "واحد ۳", "واحد ۴"]
 }
 ```
 جمع `plan` باید ۱۰۰ باشد (`PLAN_SUM`). اگر گفت‌وگو پروژهٔ فعال داشته باشد: `PROJECT_ACTIVE`.
+`steps` (اختیاری، تا ۳۰): فهرست کار برای پیشرفت پروژه (واحدها، روزها یا مراحل). مبلغ‌ها با جداکنندهٔ `.` یا `٬` و ارقام فارسی قبول است.
+
+**بستن خودکار آگهی:** با پذیرش توافقِ گفت‌وگوی یک آگهی، آگهی «آمادهٔ همکاری» (`work`) بسته می‌شود؛ آگهی «نیاز به نیرو» (`job`) وقتی تعداد پروژه‌هایش به `needCount` (پیش‌فرض ۱) برسد. `status=closed` = از کاوش برداشته می‌شود و صاحبش اعلان می‌گیرد؛ با `PATCH /ads/:id {status:'active'}` دوباره فعال می‌شود. پرسش بسته نمی‌شود.
 
 **قالب پیام:** `{ id, kind, body, payload, status, flagged, mine, system, projectId, createdAt }`
 `kind`: `text` `loc` `phone` `photo` `file` `deal` `day` `sys` `del` (پیام صوتی هنوز نه).
@@ -167,9 +171,10 @@
 
 | متد | مسیر | توضیح |
 |---|---|---|
-| GET | `/projects?role=&status=active\|done\|cancelled` | پروژه‌های من؛ `myRole` (client/provider)، `other`، `stageName`، `myRating` (ستاره‌ای که من داده‌ام یا null)، `can` (دکمه‌های مجاز) |
+| GET | `/projects?role=&status=active\|done\|cancelled` | پروژه‌های من؛ `myRole` (client/provider)، `other`، `stageName`، `myRating` (ستاره‌ای که من داده‌ام یا null)، `can` (دکمه‌های مجاز، از جمله `can.progress`)؛ برای کارت خانه: `progress` (`[{t, done, at}]`)، `paid` (پرداخت تأییدشده، تومان)، `paidPending` (ثبت‌شده، منتظر تأیید)، `lastReport` (`{date, done}` یا null)، `durationDays`، `startedAt` |
 | GET | `/projects/:id` | جزئیات + مراحل پرداخت |
 | POST | `/projects/:id/start` | توافق ← در حال اجرا (هر دو طرف) |
+| PUT | `/projects/:id/progress` | `{ items: [{ t, done }] }` (تا ۳۰) — **فقط مجری** (`PROVIDER_ONLY`)، پروژهٔ فعال. ردیف تازه‌تیک‌خورده `at` می‌گیرد؛ تیک تازه ← پیام سیستمی «پیشرفت کار: … (۲ از ۴)» و اعلان برای کارفرما |
 | POST | `/projects/:id/finish` | در حال اجرا ← تمام؛ **فقط کارفرما**. +۱ «پروژهٔ انجام‌شده» برای هر دو |
 | POST | `/projects/:id/cancel` | `{ reason }` |
 | POST | `/projects/:id/review` | `{ rating(1-5), text? }` — فقط پروژهٔ تمام‌شده، هر طرف یک بار |

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { contracts, conversations, profiles, projects, reviews, STAGES } from '../../db/schema';
+import { contracts, conversations, dailyReports, profiles, projectPayments, projects, reviews, STAGES } from '../../db/schema';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
@@ -13,10 +13,39 @@ import { notify } from '../notifications/notify';
 import { publicFileUrl } from '../files/files.service';
 import { voidPendingContract } from '../contracts/contract.service';
 
+const faDigits = (n: number) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+
 const r = Router();
 r.use(requireAuth);
 
-function shape(row: { p: Project; client: Party; provider: Party }, userId: string, myRating: number | undefined) {
+type Summary = { paid: number; pending: number; lastReport: { date: string; done: string } | null };
+const EMPTY: Summary = { paid: 0, pending: 0, lastReport: null };
+/** خلاصهٔ کارت خانه: پول تأییدشده/در انتظار تأیید و آخرین گزارش روزانه */
+async function summaries(ids: string[]) {
+  const m = new Map<string, Summary>();
+  if (!ids.length) return m;
+  const [pays, reps] = await Promise.all([
+    db
+      .select({
+        id: projectPayments.projectId,
+        paid: sql<number>`coalesce(sum(${projectPayments.amount}) filter (where ${projectPayments.status} = 'confirmed'), 0)::bigint`,
+        pending: sql<number>`coalesce(sum(${projectPayments.amount}) filter (where ${projectPayments.status} = 'recorded'), 0)::bigint`,
+      })
+      .from(projectPayments)
+      .where(inArray(projectPayments.projectId, ids))
+      .groupBy(projectPayments.projectId),
+    db
+      .selectDistinctOn([dailyReports.projectId], { id: dailyReports.projectId, date: dailyReports.reportDate, done: dailyReports.done })
+      .from(dailyReports)
+      .where(inArray(dailyReports.projectId, ids))
+      .orderBy(dailyReports.projectId, desc(dailyReports.reportDate), desc(dailyReports.createdAt)),
+  ]);
+  for (const x of pays) m.set(x.id, { paid: Number(x.paid), pending: Number(x.pending), lastReport: null });
+  for (const x of reps) m.set(x.id, { ...(m.get(x.id) ?? EMPTY), lastReport: { date: x.date, done: x.done.slice(0, 140) } });
+  return m;
+}
+
+function shape(row: { p: Project; client: Party; provider: Party }, userId: string, myRating: number | undefined, sum: Summary = EMPTY) {
   const iAmClient = row.client.userId === userId;
   const reviewed = myRating !== undefined;
   const strip = ({ userId: _u, avatarFileId, ...x }: Party) => ({ ...x, avatarUrl: publicFileUrl(avatarFileId) });
@@ -29,10 +58,15 @@ function shape(row: { p: Project; client: Party; provider: Party }, userId: stri
     other: strip(iAmClient ? row.provider : row.client),
     // ستاره‌ای که من به طرف مقابل داده‌ام (null = هنوز نداده‌ام)
     myRating: myRating ?? null,
+    // کارت خانه: پول دریافت‌شده (تأیید طرف مقابل) و در انتظار تأیید، آخرین گزارش روزانه
+    paid: sum.paid,
+    paidPending: sum.pending,
+    lastReport: sum.lastReport,
     // دکمه‌های مجاز برای کاربر فعلی
     can: {
       start: row.p.status === 'active' && row.p.stage === 1,
       finish: row.p.status === 'active' && row.p.stage === 2 && iAmClient,
+      progress: row.p.status === 'active' && !iAmClient,
       cancel: row.p.status === 'active' && row.p.stage < 3,
       review: row.p.status === 'done' && !reviewed,
     },
@@ -72,8 +106,9 @@ r.get(
       .innerJoin(providerP, eq(providerP.id, projects.providerProfileId))
       .where(and(...conds))
       .orderBy(sql`case ${projects.status} when 'active' then 0 when 'done' then 1 else 2 end`, desc(projects.updatedAt));
-    const reviewed = await myReviewed(req.user!.id, rows.map((x) => x.p.id));
-    res.json({ items: rows.map((x) => shape(x, req.user!.id, reviewed.get(x.p.id))) });
+    const ids = rows.map((x) => x.p.id);
+    const [reviewed, sums] = await Promise.all([myReviewed(req.user!.id, ids), summaries(ids)]);
+    res.json({ items: rows.map((x) => shape(x, req.user!.id, reviewed.get(x.p.id), sums.get(x.p.id))) });
   }),
 );
 
@@ -82,12 +117,13 @@ r.get(
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
     const row = await load(req.user!.id, id);
-    const [reviewed, [ctr]] = await Promise.all([
+    const [reviewed, sums, [ctr]] = await Promise.all([
       myReviewed(req.user!.id, [id]),
+      summaries([id]),
       db.select({ status: contracts.status, number: contracts.number }).from(contracts).where(eq(contracts.projectId, id)).limit(1),
     ]);
     // contract: null = هنوز قرارداد تنظیم نشده
-    res.json({ project: { ...shape(row, req.user!.id, reviewed.get(id)), contract: ctr ?? null } });
+    res.json({ project: { ...shape(row, req.user!.id, reviewed.get(id), sums.get(id)), contract: ctr ?? null } });
   }),
 );
 
@@ -163,6 +199,34 @@ r.post(
     if (!p) throw conflict('وضعیت پروژه عوض شده', 'BAD_STAGE');
     await voidPendingContract(id);
     await afterChange(row, p, req.user!.id, `پروژه لغو شد. دلیل: ${reason}`, 'پروژه لغو شد');
+    res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
+  }),
+);
+
+/**
+ * پیشرفت کار: مجری فهرست کار (واحدها یا مراحل) را تیک می‌زند یا ویرایش می‌کند؛ کارفرما فقط می‌بیند.
+ * تیک تازه ← پیام سیستمی در چت و اعلان برای کارفرما.
+ */
+r.put(
+  '/:id/progress',
+  ah(async (req, res) => {
+    const { id } = parse(uuidParam, req.params);
+    const body = parse(
+      z.object({ items: z.array(z.object({ t: z.string().trim().min(1).max(60), done: z.boolean() })).max(30) }),
+      req.body,
+    );
+    const row = await load(req.user!.id, id);
+    if (row.provider.userId !== req.user!.id) throw forbidden('پیشرفت کار را مجری ثبت می‌کند؛ تو می‌توانی ببینی', 'PROVIDER_ONLY');
+    if (row.p.status !== 'active') throw conflict('این پروژه فعال نیست', 'BAD_STAGE');
+    const before = new Map(row.p.progress.map((x) => [x.t, x]));
+    const now = new Date().toISOString();
+    const items = body.items.map((x) => ({ t: x.t, done: x.done, at: x.done ? (before.get(x.t)?.done ? before.get(x.t)!.at ?? now : now) : null }));
+    const fresh = items.filter((x) => x.done && !before.get(x.t)?.done);
+    const [p] = await db.update(projects).set({ progress: items, updatedAt: new Date() }).where(eq(projects.id, id)).returning();
+    if (fresh.length) {
+      const n = items.filter((x) => x.done).length;
+      await afterChange(row, p, req.user!.id, `پیشرفت کار: «${fresh.map((x) => x.t).join('، ')}» تمام شد (${faDigits(n)} از ${faDigits(items.length)}).`, 'پیشرفت تازه در پروژه');
+    } else emitTo([row.client.userId, row.provider.userId], { type: 'project', data: { project: p } });
     res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
   }),
 );

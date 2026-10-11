@@ -25,7 +25,7 @@ export const pageQuery = z.object({
 
 export const uuidParam = z.object({ id: z.string().uuid() });
 
-/** مبلغ تومان: عدد، یا رشته با ارقام فارسی و جداکننده («۲۸٬۵۰۰٬۰۰۰») */
+/** مبلغ تومان: عدد، یا رشته با ارقام فارسی و جداکننده («۲۸.۵۰۰.۰۰۰» یا «۲۸٬۵۰۰٬۰۰۰») */
 export const moneyInput = z.preprocess(
   (v) => (typeof v === 'string' ? Number(toLatinDigits(v).replace(/[^\d]/g, '')) || null : v),
   z.number().int().min(0).max(1e15).nullable(),

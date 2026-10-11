@@ -57,7 +57,7 @@ function autoTitle(role: Role, d: RoleData): string {
     case 'specialist':
       return `متخصص ${list('skills')}`;
     case 'engineer':
-      return `مهندس ${d.field ?? ''} · ${list('services')}`;
+      return `مهندس ${[d.field ?? []].flat().slice(0, 2).join(' و ')} · ${list('services')}`;
     case 'contractor':
       return `پیمانکار · ${list('kinds')}`;
     case 'company':

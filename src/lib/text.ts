@@ -39,3 +39,9 @@ export function isValidNationalCode(input: string): boolean {
   const check = Number(s[9]);
   return sum < 2 ? check === sum : check === 11 - sum;
 }
+
+/** مبلغ برای نمایش: ارقام فارسی، سه‌رقم‌سه‌رقم با نقطه (۸۵۰.۲۰۰.۰۰۰) — هم‌تراز با فرانت */
+export function faMoney(n: number): string {
+  const s = String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (n < 0 ? '−' : '') + s.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+}

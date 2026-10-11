@@ -36,6 +36,7 @@ import {
   type Role,
 } from '../../db/schema';
 import { ah, moneyInput, parse, uuidParam } from '../../lib/http';
+import { faMoney } from '../../lib/text';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { CONFIG_KEYS, cfg, saveConfig, storedConfig, validateConfig, type ConfigKey } from '../../lib/appConfig';
 import { emitTo } from '../../lib/events';
@@ -557,9 +558,9 @@ r.post(
     const [arb] = await db.select().from(arbiters).where(eq(arbiters.id, body.arbiterId)).limit(1);
     if (!arb) throw notFound('حل‌کننده پیدا نشد');
     const bal = (await arbiterBalances()).get(arb.id)!;
-    if (body.amount > bal.pending) throw conflict(`مانده قابل تسویه ${bal.pending.toLocaleString('fa-IR')} تومان است`, 'OVER_BALANCE');
+    if (body.amount > bal.pending) throw conflict(`مانده قابل تسویه ${faMoney(bal.pending)} تومان است`, 'OVER_BALANCE');
     const [o] = await db.insert(arbiterPayouts).values({ arbiterId: arb.id, amount: body.amount, ref: body.ref, adminUserId: req.user!.id }).returning();
-    await notify(arb.userId, { type: 'id', title: 'تسویهٔ سهم داوری', body: `${body.amount.toLocaleString('fa-IR')} تومان به حسابت واریز شد · پیگیری ${body.ref}` });
+    await notify(arb.userId, { type: 'id', title: 'تسویهٔ سهم داوری', body: `${faMoney(body.amount)} تومان به حسابت واریز شد · پیگیری ${body.ref}` });
     await adminLog(db, req.user!, 'arbiter.payout', 'arbiter', arb.id, `${body.amount} · ${body.ref}`);
     res.status(201).json({ payout: o });
   }),

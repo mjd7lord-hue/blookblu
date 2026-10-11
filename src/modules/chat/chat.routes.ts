@@ -111,6 +111,7 @@ r.post(
           .max(8)
           .default([{ title: 'پس از پایان کار', pct: 100 }]),
         retentionPct: z.number().int().min(0).max(20).default(0),
+        steps: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
       }),
       req.body,
     );

@@ -20,7 +20,7 @@ describe('phase 5: contract, payments, statements, daily reports', () => {
       { title: 'پیش‌پرداخت', pct: 30 },
       { title: 'پایان کار', pct: 70 },
     ]);
-    expect(c0.terms.clauses[2].text).toContain('۸٬۵۵۰٬۰۰۰ تومان');
+    expect(c0.terms.clauses[2].text).toContain('۸.۵۵۰.۰۰۰ تومان');
     expect(c0.terms.provider.code).toBe(w.profile.code);
     expect((await api().get(`/api/projects/${pid}/contract`).set(auth(stranger.token))).status).toBe(404);
     // دوباره = همان قرارداد

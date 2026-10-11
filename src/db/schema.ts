@@ -399,7 +399,10 @@ export type DealPayload = {
   durationDays: number;
   plan: { title: string; pct: number }[];
   retentionPct: number;
+  // فهرست کار (واحدها یا مراحل) برای پیشرفت پروژه؛ مجری تیک می‌زند
+  steps?: string[];
 };
+export type ProgressItem = { t: string; done: boolean; at?: string | null };
 export type DayPayload = { date: string; hour: string };
 
 export const messages = pgTable(
@@ -449,6 +452,8 @@ export const projects = pgTable(
     durationDays: smallint('duration_days'),
     paymentPlan: jsonb('payment_plan').$type<{ title: string; pct: number }[]>().notNull(),
     retentionPct: smallint('retention_pct').notNull().default(0),
+    // پیشرفت: فهرست کار (واحد ۱…، یا مراحل طراحی/نظارت) که مجری تیک می‌زند
+    progress: jsonb('progress').$type<ProgressItem[]>().notNull().default([]),
     startedAt: ts('started_at'),
     finishedAt: ts('finished_at'),
     cancelledAt: ts('cancelled_at'),

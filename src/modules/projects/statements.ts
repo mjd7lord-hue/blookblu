@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { and, desc, eq, inArray, max } from 'drizzle-orm';
 import { db } from '../../db';
 import { statements, type StatementItem, type StatementTotals } from '../../db/schema';
-import { ah, parse, uuidParam } from '../../lib/http';
+import { ah, moneyInput, parse, uuidParam } from '../../lib/http';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
 import { toLatinDigits } from '../../lib/text';
@@ -47,7 +47,7 @@ const itemInput = z.object({
   title: z.string().trim().min(2).max(120),
   unit: z.string().trim().min(1).max(30),
   qty: num.pipe(z.number().positive().max(1e9)),
-  unitPrice: num.pipe(z.number().int().min(0).max(1e12)),
+  unitPrice: moneyInput.pipe(z.number().int().min(0).max(1e12)),
   done: num.pipe(z.number().min(0).max(1e9)),
 });
 type ItemInput = z.infer<typeof itemInput>;

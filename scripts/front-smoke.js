@@ -34,6 +34,7 @@ const html = fs
   .replace('<script src="live.js"></script>', inline('live.js'))
   .replace('<script src="live-projects.js"></script>', inline('live-projects.js'))
   .replace('<script src="live-more.js"></script>', inline('live-more.js'))
+  .replace('<script src="work.js"></script>', inline('work.js'))
   .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
@@ -197,6 +198,19 @@ async function register(w, role, data) {
   // پرداخت: مجری ثبت می‌کند، کارفرما تأیید
   ev(B, 'openProjPage(0)');
   await until(() => ev(B, "S.cur==='pdet'"), 'project page B');
+  // پیشرفت کار: مجری فهرست «واحد ۱ تا ۳» می‌سازد و یکی را تیک می‌زند؛ کارفرما در کارت خانه می‌بیند
+  if (!B.document.querySelector('#pgSec')) throw new Error('بخش «پیشرفت کار» در صفحهٔ پروژه نیست');
+  ev(B, "pgEdit(0);stepPick('pg','units');stepN('pg',-1)");
+  click(B, '#pgGo');
+  await until(() => ev(B, "(S.projs[S.role][0]._x.progress||[]).length") === 3, 'progress list saved');
+  ev(B, 'pgTick(0,0)');
+  await until(async () => (await ev(B, "LIVE.api('GET','/projects/'+S.projs[S.role][0]._id)")).project.progress.filter((x) => x.done).length === 1, 'progress ticked on server');
+  await ev(A, 'LIVE.loadProjects(true)');
+  ev(A, "go('home')");
+  await until(() => /۱ از ۳/.test((A.document.querySelector('#hmProj .hp-card') || {}).textContent || ''), 'home project card').catch((e) => {
+    throw new Error(e.message + ' · ' + JSON.stringify(ev(A, "[S.cur,S.role,(S.projs[S.role]||[]).map(p=>[p.stage,p.status,(p._x&&p._x.progress||[]).length])]")) + ' · ' + [...A.document.querySelectorAll('#s-home > *')].map((x) => x.className + ':' + x.textContent.trim().slice(0, 30)).join(' | '));
+  });
+  log('پیشرفت کار: مجری تیک زد ← کارت خانهٔ کارفرما:', A.document.querySelector('#hmProj .hp-row').textContent.trim());
   ev(B, "addPay(S.role+':0')");
   ev(B, "document.getElementById('payA').value='۲٬۰۰۰٬۰۰۰'");
   ev(B, `document.getElementById('payT').value='${String(Date.now()).slice(-10)}'`);
@@ -405,15 +419,17 @@ async function register(w, role, data) {
 
   // قرارداد از داخل چت: دکمهٔ «ثبت قرارداد» و ۳ گام
   if (!B.document.querySelector('#s-chat .qr-ctr')) throw new Error('دکمهٔ «ثبت قرارداد» در چت نیست');
+  // کارگر: قرارداد ساده (یک صفحه، جمع خودکار و مبلغ به حروف)
   ev(B, 'ctrWizard()');
-  await until(() => B.document.getElementById('cwJ'), 'contract wizard step 1');
-  ev(B, "document.getElementById('cwJ').value='بتن‌ریزی سقف ویلای طولا';document.getElementById('cwP').value='۲٬۲۰۰٬۰۰۰ تومان روزانه';ctrStep(2)");
-  await until(() => B.document.getElementById('cwS'), 'contract wizard step 2');
-  ev(B, 'ctrStep(3)');
-  await until(() => B.document.querySelector('.cw-sum'), 'contract wizard step 3');
-  ev(B, 'ctrSend()');
+  await until(() => B.document.getElementById('csJ'), 'simple contract');
+  ev(B, "document.getElementById('csJ').value='بتن‌ریزی سقف ویلای طولا';const r=document.getElementById('csR');r.value='2200000';r.dispatchEvent(new Event('input',{bubbles:true}));csN(1)");
+  const words = B.document.getElementById('csTot').textContent;
+  if (!words.includes("۱۳.۲۰۰.۰۰۰") || !/سیزده میلیون و دویست هزار/.test(words)) throw new Error('جمع قرارداد ساده درست نیست: ' + words);
+  ev(B, 'csSend()');
   await until(() => ev(B, "S.convs.find(c=>c.id===S.cid).msgs.some(m=>m.k==='deal'&&m.id)"), 'contract proposal sent');
-  log('ثبت قرارداد از چت (۳ گام) ← پیشنهاد با مراحل پرداخت روی سرور');
+  const dm = await ev(B, "LIVE.api('GET','/conversations/'+S.cid+'/messages').then(d=>d.items.find(m=>m.kind==='deal').payload)");
+  if (dm.amount !== 13200000 || dm.durationDays !== 6 || dm.steps.length !== 6) throw new Error('پیشنهاد قرارداد ساده روی سرور درست نیست: ' + JSON.stringify(dm));
+  log('قرارداد سادهٔ کارگر:', dm.price, '× ۶ روز =', words.replace(/\s+/g, ' ').trim());
 
   // آگهی رایگان: پیمانکار یک آگهی فعال دارد
   ev(A, "closeSheet();go('home');LIVE.loaded['myads:'+S.role]=Date.now();openWizard()");

@@ -1,4 +1,5 @@
 import type { contracts, contractSignatures, projectPayments } from '../../db/schema';
+import { faMoney } from '../../lib/text';
 import { faDate } from './contract.service';
 
 type Contract = typeof contracts.$inferSelect;
@@ -13,7 +14,7 @@ const maskPhone = (p: string) => faDigits(`${p.slice(0, 4)}***${p.slice(-4)}`);
 
 /** صفحهٔ چاپی قرارداد (از مرورگر: چاپ → ذخیره به PDF) */
 const PAY_ST = { recorded: 'منتظر تأیید طرف مقابل', confirmed: 'تأیید شد', disputed: 'اعتراض شد' } as const;
-const money = (n: number) => faDigits(n.toLocaleString('en-US').replace(/,/g, '٬'));
+const money = (n: number) => faMoney(n);
 
 export function renderContractHtml(c: Contract, sigs: Signature[], pays: Pay[] = []) {
   const t = c.terms;

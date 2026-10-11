@@ -534,14 +534,24 @@ export async function answerProposal(userId: string, messageId: string, status: 
         durationDays: d.durationDays,
         paymentPlan: d.plan,
         retentionPct: d.retentionPct,
+        progress: (d.steps ?? []).map((t) => ({ t, done: false })),
       })
       .returning();
     await tx.update(messages).set({ projectId: project.id }).where(eq(messages.id, m.id));
+    const closedAd = conv.adId ? await closeFilledAd(conv.adId, tx) : null;
     await tx.update(conversations).set({ stage: 1, projectId: project.id }).where(eq(conversations.id, conv.id));
     await postMessage(conv, null, { kind: 'sys', body: 'توافق ثبت شد؛ هر دو طرف تأیید کردند. به «پروژه‌های من» اضافه شد.', projectId: project.id }, tx);
-    return { project };
+    return { project, closedAd };
   });
 
+  if (result.closedAd) {
+    await notify(result.closedAd.ownerUserId, {
+      type: 'req',
+      title: 'آگهی‌ات از کاوش برداشته شد',
+      body: `«${result.closedAd.title}» با ثبت قرارداد پر شد. اگر هنوز نیرو لازم داری، از «آگهی‌های من» دوباره فعالش کن.`,
+      link: { screen: 'myads', id: result.closedAd.id },
+    });
+  }
   await notify(other.p.userId, {
     type: 'req',
     title: status === 'accepted' ? (m.kind === 'deal' ? 'توافق شما پذیرفته شد' : 'روز شروع تأیید شد') : 'پیشنهاد شما رد شد',
@@ -550,6 +560,30 @@ export async function answerProposal(userId: string, messageId: string, status: 
   });
   if (result.project) emitTo([userId, other.p.userId], { type: 'project', data: { project: result.project } });
   return result;
+}
+
+/**
+ * بعد از قرارداد، آگهی پرشده از کاوش برداشته می‌شود (status=closed؛ صاحبش می‌تواند دوباره فعال کند):
+ * آگهی «آمادهٔ کار» (work) با اولین قرارداد؛ آگهی «نیاز به نیرو» (job) وقتی تعداد قراردادها به needCount (پیش‌فرض ۱) برسد.
+ * پرسش (consult) بسته نمی‌شود.
+ */
+async function closeFilledAd(adId: string, tx: Tx) {
+  const [ad] = await tx
+    .select({ id: ads.id, type: ads.type, title: ads.title, status: ads.status, needCount: ads.needCount, ownerUserId: profiles.userId })
+    .from(ads)
+    .innerJoin(profiles, eq(profiles.id, ads.profileId))
+    .where(eq(ads.id, adId))
+    .limit(1);
+  if (!ad || ad.status !== 'active' || ad.type === 'consult') return null;
+  if (ad.type === 'job') {
+    const [{ n }] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(projects)
+      .where(and(eq(projects.adId, adId), ne(projects.status, 'cancelled')));
+    if (n < Math.max(1, ad.needCount ?? 1)) return null;
+  }
+  await tx.update(ads).set({ status: 'closed', updatedAt: new Date() }).where(eq(ads.id, adId));
+  return ad;
 }
 
 /* ---------- گفت‌وگوی پشتیبانی ---------- */

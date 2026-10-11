@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "progress" jsonb DEFAULT '[]'::jsonb NOT NULL;
