@@ -147,6 +147,8 @@ projectPaymentsRouter.post(
     await assertUniqueTracking(trackingNo);
     const v = await projectFor(req.user!.id, id);
     if (v.p.status === 'cancelled') throw conflict('این پروژه لغو شده است', 'PROJECT_CLOSED');
+    // پرداخت را پرداخت‌کننده (کارفرمای قرارداد) ثبت می‌کند؛ مجری فقط دریافت را تأیید یا اعتراض می‌کند
+    if (v.side !== 'client') throw forbidden('پرداخت را کارفرما ثبت می‌کند؛ تو دریافت را تأیید می‌کنی', 'CLIENT_ONLY');
     if (body.milestoneIndex != null && body.milestoneIndex >= v.p.paymentPlan.length) throw badRequest('این مرحلهٔ پرداخت در قرارداد نیست', 'BAD_MILESTONE');
     if (body.statementId) {
       const [st] = await db

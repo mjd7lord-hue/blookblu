@@ -175,7 +175,7 @@
 | GET | `/projects/:id` | جزئیات + مراحل پرداخت |
 | POST | `/projects/:id/start` | توافق ← در حال اجرا (هر دو طرف) |
 | PUT | `/projects/:id/progress` | `{ items: [{ t, done }] }` (تا ۳۰) — **فقط مجری** (`PROVIDER_ONLY`)، پروژهٔ فعال. ردیف تازه‌تیک‌خورده `at` می‌گیرد؛ تیک تازه ← پیام سیستمی «پیشرفت کار: … (۲ از ۴)» و اعلان برای کارفرما |
-| POST | `/projects/:id/finish` | در حال اجرا ← تمام؛ **فقط کارفرما**. +۱ «پروژهٔ انجام‌شده» برای هر دو |
+| POST | `/projects/:id/finish` | در حال اجرا ← تمام؛ **فقط کارفرما**. +۱ «پروژهٔ انجام‌شده» برای هر دو. اگر آگهی آمادگی (`work`) مجری با قرارداد بسته شده و کار فعال دیگری ندارد ← اعلان «دوباره آماده به کار؟» |
 | POST | `/projects/:id/cancel` | `{ reason }` |
 | POST | `/projects/:id/review` | `{ rating(1-5), text? }` — فقط پروژهٔ تمام‌شده، هر طرف یک بار |
 
@@ -329,7 +329,7 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
 | GET | `/projects/:id/payments` | — | `{ items, summary, labels }` |
-| POST | `/projects/:id/payments` | `{ amount, label, milestoneIndex?, statementId?, paidOn?, note?, trackingNo?, bank? }` | `amount` عدد یا «۸٬۵۵۰٬۰۰۰». `label` یکی از `labels`. `paidOn` مثل `2026-09-28` (پیش‌فرض امروز؛ آینده ← `FUTURE_PAYMENT`). شمارهٔ پیگیری تکراری در کل بلوک ← `DUP_TRACKING` |
+| POST | `/projects/:id/payments` | `{ amount, label, milestoneIndex?, statementId?, paidOn?, note?, trackingNo?, bank? }` | **فقط کارفرمای قرارداد** (`CLIENT_ONLY`)؛ مجری دریافت را تأیید یا اعتراض می‌کند. `amount` عدد یا «۸.۵۵۰.۰۰۰». `label` یکی از `labels`. `paidOn` مثل `2026-09-28` (پیش‌فرض امروز؛ آینده ← `FUTURE_PAYMENT`). شمارهٔ پیگیری تکراری در کل بلوک ← `DUP_TRACKING` |
 | POST | `/payments/:id/receipt` | multipart: `file` (عکس/PDF) + `trackingNo?`, `bank?` | رسید واریز؛ فقط ثبت‌کننده و تا تأیید نشده (`PAYMENT_LOCKED`). همان فایل برای پرداخت دیگر ← `DUP_RECEIPT` |
 | POST | `/payments/:id/confirm` | — | فقط طرف مقابلِ ثبت‌کننده (`OWN_PAYMENT`) |
 | POST | `/payments/:id/dispute` | `{ reason }` | |

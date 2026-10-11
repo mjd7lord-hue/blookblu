@@ -48,6 +48,9 @@ describe('home project cards: progress, money, ad closing', () => {
     expect(nt.body.items.some((n: { title: string }) => n.title === 'پیشرفت تازه در پروژه')).toBe(true);
 
     // پرداخت: ثبت ← در انتظار تأیید؛ تأیید ← دریافت‌شده
+    // مجری پرداخت ثبت نمی‌کند؛ فقط کارفرما
+    const byProvider = await api().post(`/api/projects/${pid}/payments`).set(auth(sp.token)).send({ amount: '۱.۰۰۰.۰۰۰', label: 'پیش‌پرداخت', milestoneIndex: 0 });
+    expect(byProvider.body.error.code).toBe('CLIENT_ONLY');
     const p1 = await api().post(`/api/projects/${pid}/payments`).set(auth(boss.token)).send({ amount: '۲۰۰.۰۰۰.۰۰۰', label: 'پیش‌پرداخت', milestoneIndex: 0 });
     expect(p1.body.payment.amount).toBe(200000000);
     let list = await api().get('/api/projects').query({ role: 'specialist' }).set(auth(sp.token));
@@ -96,9 +99,18 @@ describe('home project cards: progress, money, ad closing', () => {
     expect(wad.status).toBe(201);
     const wr = await api().post(`/api/ads/${wad.body.ad.id}/responses`).set(auth(boss.token)).send({ message: 'بیا سر کار' });
     const d2 = await api().post(`/api/conversations/${wr.body.response.conversationId}/deals`).set(auth(boss.token)).send(deal({ job: 'بنایی', durationDays: 5 }));
-    await api().post(`/api/messages/${d2.body.message.id}/answer`).set(auth(w2.token)).send({ status: 'accepted' }).expect(200);
+    const acc2 = await api().post(`/api/messages/${d2.body.message.id}/answer`).set(auth(w2.token)).send({ status: 'accepted' }).expect(200);
     const ex2 = await api().get('/api/ads').query({ mode: 'workers' });
     expect(ex2.body.items.some((a: { id: string }) => a.id === wad.body.ad.id)).toBe(false);
+
+    // پایان کار ← یادآوری «دوباره آماده به کار؟» برای کارگر
+    const pid2 = acc2.body.project.id;
+    await api().post(`/api/projects/${pid2}/start`).set(auth(w2.token)).expect(200);
+    await api().post(`/api/projects/${pid2}/finish`).set(auth(boss.token)).expect(200);
+    const n2 = await api().get('/api/notifications').set(auth(w2.token));
+    expect(n2.body.items.some((n: { title: string }) => n.title === 'دوباره آماده به کار؟')).toBe(true);
+    const on = await api().patch(`/api/ads/${wad.body.ad.id}`).set(auth(w2.token)).send({ status: 'active' });
+    expect(on.body.ad.status).toBe('active');
 
     // دوباره فعال کردن از «آگهی‌های من»
     const re = await api().patch(`/api/ads/${adId}`).set(auth(boss.token)).send({ status: 'active' });

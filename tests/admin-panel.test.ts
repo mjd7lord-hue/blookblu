@@ -93,7 +93,7 @@ describe('admin panel: roles, permissions, province scope, snapshot', () => {
     expect(JSON.stringify((await api().get('/api/notifications').set(auth(c.token))).body)).toContain('متوقف شد');
 
     const w = await registered('worker');
-    const g = await api().post('/api/guarantees').set(auth(w.token)).send({ phone: c.phone, name: 'پیمانکار یحیایی', relation: 'کارفرمای قبلی' });
+    const g = await api().post('/api/guarantees').set(auth(w.token)).send({ phone: c.phone, name: 'پیمانکار صالحی', relation: 'کارفرمای قبلی' });
     const gid = g.body.guarantee?.id ?? (await api().get('/api/admin/panel/snapshot').set(auth(o.token))).body.guarantees[0].id;
     await api().patch(`/api/admin/panel/guarantees/${gid}`).set(auth(o.token)).send({ status: 'rejected' }).expect(200);
     await api().delete(`/api/admin/panel/guarantees/${gid}`).set(auth(o.token)).expect(200);

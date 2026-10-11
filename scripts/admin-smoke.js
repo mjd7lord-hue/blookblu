@@ -64,7 +64,7 @@ async function user(phone, role, data) {
 
   // مدیر ارشد و یک کارگر با درخواست احراز هویت
   const ownerPhone = '0912' + n();
-  const owner = await user(ownerPhone, 'general', { fn: 'مجید', ln: 'یحیایی', nat: 'ایرانی', prov: 'هرمزگان', city: 'قشم', need: 'بازسازی و تعمیرات', land: 'ساختمان موجود', budget: 'زیر ۵۰ میلیون' });
+  const owner = await user(ownerPhone, 'general', { fn: 'حسین', ln: 'صالحی', nat: 'ایرانی', prov: 'هرمزگان', city: 'قشم', need: 'بازسازی و تعمیرات', land: 'ساختمان موجود', budget: 'زیر ۵۰ میلیون' });
   await db.update(users).set({ isAdmin: true }).where(eq(users.id, owner.profile.userId));
   const w = await user('0935' + n(), 'worker', { fn: 'رضا', ln: 'بهمنی', nat: 'ایرانی', prov: 'هرمزگان', city: 'درگهان', range: 'کل استان', skills: ['بتن‌ریزی'], exp: '۵ تا ۱۰ سال', wage: '۱٬۸۰۰٬۰۰۰', team: 'تنها', days: [0, 2], hours: 'تمام روز' });
   const JPEG = new Blob([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9])], { type: 'image/jpeg' });

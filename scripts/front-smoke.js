@@ -109,7 +109,7 @@ async function register(w, role, data) {
   });
   log('بوت: متصل به سرور، دادهٔ نمایشی کنار رفت؛ آگهی‌ها:', ev(A, 'ADS.length'));
   await login(A, '12' + String(Date.now()).slice(-7));
-  await register(A, 'contractor', { fn: 'مجید', ln: 'یحیایی', nat: 'ایرانی', prov: 'هرمزگان', city: 'قشم', range: 'کل استان', kinds: ['اسکلت بتنی', 'سفت‌کاری'], exp: 'بیش از ۱۰ سال', contract: ['متری'], max: '۴ تا ۶ طبقه', lic: 'ندارم', pub: true, days: [0, 2] });
+  await register(A, 'contractor', { fn: 'حسین', ln: 'صالحی', nat: 'ایرانی', prov: 'هرمزگان', city: 'قشم', range: 'کل استان', kinds: ['اسکلت بتنی', 'سفت‌کاری'], exp: 'بیش از ۱۰ سال', contract: ['متری'], max: '۴ تا ۶ طبقه', lic: 'ندارم', pub: true, days: [0, 2] });
   log('ورود و ثبت‌نام پیمانکار:', ev(A, 'LIVE.pub.code'), ev(A, 'ME().name'), 'نقش', ev(A, 'S.role'));
 
   ev(A, "openWizard();Object.assign(S.w,{type:'job',title:'۳ کارگر برای بلوک‌چینی طبقهٔ دوم',desc:'حدود ۱۰ روز کار',aud:['worker'],place:'قشم',range:'استان',wageType:'روزانه',wage:'۱٬۸۰۰٬۰۰۰',start:'فوری',need:3});publish()");
@@ -195,7 +195,6 @@ async function register(w, role, data) {
   const printed = await fetch(API + ev(B, "S.ctr[S.role+':0']._c.printUrl")).then((r) => r.text());
   if (!printed.includes('امضاشده و فعال')) throw new Error('نسخهٔ چاپی قرارداد درست نیست');
 
-  // پرداخت: مجری ثبت می‌کند، کارفرما تأیید
   ev(B, 'openProjPage(0)');
   await until(() => ev(B, "S.cur==='pdet'"), 'project page B');
   // پیشرفت کار: مجری فهرست «واحد ۱ تا ۳» می‌سازد و یکی را تیک می‌زند؛ کارفرما در کارت خانه می‌بیند
@@ -207,22 +206,26 @@ async function register(w, role, data) {
   await until(async () => (await ev(B, "LIVE.api('GET','/projects/'+S.projs[S.role][0]._id)")).project.progress.filter((x) => x.done).length === 1, 'progress ticked on server');
   await ev(A, 'LIVE.loadProjects(true)');
   ev(A, "go('home')");
-  await until(() => /۱ از ۳/.test((A.document.querySelector('#hmProj .hp-card') || {}).textContent || ''), 'home project card').catch((e) => {
+  await until(() => /۳۳٪/.test((A.document.querySelector('#phHero') || {}).textContent || '') && A.document.querySelector('#phHero .ph-art'), 'home project hero').catch((e) => {
     throw new Error(e.message + ' · ' + JSON.stringify(ev(A, "[S.cur,S.role,(S.projs[S.role]||[]).map(p=>[p.stage,p.status,(p._x&&p._x.progress||[]).length])]")) + ' · ' + [...A.document.querySelectorAll('#s-home > *')].map((x) => x.className + ':' + x.textContent.trim().slice(0, 30)).join(' | '));
   });
-  log('پیشرفت کار: مجری تیک زد ← کارت خانهٔ کارفرما:', A.document.querySelector('#hmProj .hp-row').textContent.trim());
-  ev(B, "addPay(S.role+':0')");
-  ev(B, "document.getElementById('payA').value='۲٬۰۰۰٬۰۰۰'");
-  ev(B, `document.getElementById('payT').value='${String(Date.now()).slice(-10)}'`);
-  click(B, '#sb .cta');
-  await until(() => ev(B, "(S.pays[S.role+':0']||[]).length") === 1, 'payment recorded');
+  log('پیشرفت کار: مجری تیک زد ← کارت اصلی خانهٔ کارفرما (با انیمیشن):', A.document.querySelector('#phHero .ph-who').textContent.trim(), '·', A.document.querySelector('#phHero .ph-kpi b').textContent);
+  // پرداخت: فقط کارفرما ثبت می‌کند؛ مجری دریافت را تأیید می‌کند
+  if (B.document.querySelector('#s-pdet .sec-head button[onclick^="addPay"]')) throw new Error('مجری نباید دکمهٔ «ثبت پرداخت» ببیند');
   ev(A, 'openProjPage(0)');
-  await until(() => ev(A, "S.cur==='pdet' && document.querySelector('#s-pdet [data-act=confirm]')"), 'confirm button');
-  click(A, '#s-pdet [data-act=confirm]');
-  await until(() => A.document.getElementById('pyGo'), 'confirm receipt sheet');
-  ev(A, "document.getElementById('pyOk').checked=true;document.getElementById('pyGo').click()");
-  await until(() => ev(A, "S.pays[S.role+':0'][0]._x.status") === 'confirmed', 'payment confirmed');
-  log('دفترچهٔ پرداخت: ثبت با شمارهٔ پیگیری، بررسی و تأیید دریافت —', ev(A, "S.pays[S.role+':0'][0].f"), '· مستند:', ev(A, "S.pays[S.role+':0'][0]._x.documented"));
+  await until(() => ev(A, "S.cur==='pdet'"), 'project page A');
+  ev(A, "addPay(S.role+':0')");
+  ev(A, "document.getElementById('payA').value='۲.۰۰۰.۰۰۰'");
+  ev(A, `document.getElementById('payT').value='${String(Date.now()).slice(-10)}'`);
+  click(A, '#sb .cta');
+  await until(() => ev(A, "(S.pays[S.role+':0']||[]).length") === 1, 'payment recorded');
+  ev(B, 'openProjPage(0)');
+  await until(() => ev(B, "S.cur==='pdet' && document.querySelector('#s-pdet [data-act=confirm]')"), 'confirm button');
+  click(B, '#s-pdet [data-act=confirm]');
+  await until(() => B.document.getElementById('pyGo'), 'confirm receipt sheet');
+  ev(B, "document.getElementById('pyOk').checked=true;document.getElementById('pyGo').click()");
+  await until(() => ev(B, "S.pays[S.role+':0'][0]._x.status") === 'confirmed', 'payment confirmed');
+  log('دفترچهٔ پرداخت: کارفرما با شمارهٔ پیگیری ثبت کرد، مجری دریافت را تأیید کرد —', ev(B, "S.pays[S.role+':0'][0].f"), '· مستند:', ev(B, "S.pays[S.role+':0'][0]._x.documented"));
 
   // شروع کار
   ev(B, 'advProj(0)');
@@ -231,17 +234,22 @@ async function register(w, role, data) {
 
   // صورت‌وضعیت: مجری ردیف اضافه و ارسال می‌کند، کارفرما تأیید
   ev(B, 'openSov(0)');
-  await until(() => ev(B, "S.cur==='sov' && document.getElementById('sovAdd')"), 'sov open');
-  click(B, '#sovAdd');
-  ev(B, "document.getElementById('srN').value='بلوک‌چینی دیوار طبقهٔ دوم';document.getElementById('srQ').value='۱۲۰';document.getElementById('srD').value='۶۰';document.getElementById('srP').value='۴۲۰٬۰۰۰'");
-  click(B, '#srGo');
+  await until(() => ev(B, "S.cur==='sov' && document.getElementById('sovAdd2')"), 'sov open');
+  if (!B.document.querySelector('#s-sov .sov-guide')) throw new Error('راهنمای صورت‌وضعیت نیست');
+  // صورت‌وضعیت ساده: کار + مبلغ + درصد انجام‌شده (بدون مقدار کل و فی)
+  click(B, '#sovAdd2');
+  ev(B, "document.getElementById('svN').value='بلوک‌چینی دیوار طبقهٔ دوم';document.getElementById('svA').value='۵۰.۴۰۰.۰۰۰';document.querySelector('#svP [data-v=\"50\"]').click()");
+  click(B, '#svGo');
+  ev(B, "sovQ(S.role+':0',0,1)");
+  if (ev(B, "S.sov[S.role+':0'].items[0].done") !== 60) throw new Error('دکمهٔ + درصد را ۱۰ تا بالا نبرد');
   ev(B, "sovSend(S.role+':0')");
   await until(() => ev(B, "S.sov[S.role+':0'].st") === 'sent', 'sov sent');
   ev(A, 'openSov(0)');
   await until(() => ev(A, "document.getElementById('sovOk')"), 'approve button');
   click(A, '#sovOk');
   await until(() => ev(A, "S.sov[S.role+':0'].st") === 'ok', 'sov approved');
-  log('صورت‌وضعیت: ارسال مجری و تأیید کارفرما —', ev(A, "S.sov[S.role+':0']._s.totals.payable"), 'تومان قابل پرداخت');
+  log('صورت‌وضعیت ساده (۶۰٪ از ۵۰.۴۰۰.۰۰۰): ارسال مجری و تأیید کارفرما —', ev(A, "S.sov[S.role+':0']._s.totals.payable"), 'تومان قابل پرداخت');
+  if (A.document.querySelector('#s-sov .sv-pay') == null) throw new Error('خلاصهٔ «قابل پرداخت» ساده نیست');
 
   // گزارش روزانه
   ev(B, 'openProjPage(0)');

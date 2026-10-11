@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { contracts, conversations, dailyReports, profiles, projectPayments, projects, reviews, STAGES } from '../../db/schema';
+import { ads, contracts, conversations, dailyReports, profiles, projectPayments, projects, reviews, STAGES } from '../../db/schema';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
@@ -180,6 +180,25 @@ r.post(
       return np;
     });
     await afterChange(row, p, req.user!.id, 'کار تمام شد و کارفرما تأیید کرد. حالا می‌توانید به هم امتیاز بدهید.', 'پروژه تمام شد؛ امتیاز بده');
+    // «آماده به کار»: آگهی آمادگی مجری با قرارداد خاموش شده بود؛ اگر کار فعال دیگری ندارد، یادآوری برای روشن کردن دوباره
+    const [closedReady] = await db
+      .select({ id: ads.id })
+      .from(ads)
+      .where(and(eq(ads.profileId, row.provider.id), eq(ads.type, 'work'), eq(ads.status, 'closed')))
+      .limit(1);
+    const [busy] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.providerProfileId, row.provider.id), eq(projects.status, 'active')))
+      .limit(1);
+    if (closedReady && !busy) {
+      await notify(row.provider.userId, {
+        type: 'req',
+        title: 'دوباره آماده به کار؟',
+        body: 'کار تمام شد. در خانه کلید «آماده به کار» را روشن کن تا کارفرماهای تازه پیدایت کنند.',
+        link: { screen: 'home' },
+      });
+    }
     res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
   }),
 );
