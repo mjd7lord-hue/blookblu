@@ -513,6 +513,16 @@ async function register(w, role, data) {
   await until(() => B.document.getElementById('rdMine'), 'worker sees own pinned card');
   log('آماده به کار: ویرایش (۲.۸۰۰.۰۰۰ روزانه) و روشن شد ← کارفرما در کاوش با نشان سبز می‌بیند؛ کارگر «این تویی» بالای کاوش');
 
+  // صفحهٔ «من»: کلید «پروفایل عمومی» روی سرور ذخیره شود (قبلاً فقط در حافظه بود)
+  const pubOf = async () => (await ev(A, "LIVE.api('GET','/me')")).profiles.find((p) => p.role === 'contractor').isPublic;
+  ev(A, "go('me')");
+  await until(() => A.document.querySelector('#s-me .tog[aria-label="پروفایل عمومی"]'), 'me privacy toggle');
+  click(A, '#s-me .tog[aria-label="پروفایل عمومی"]');
+  await until(async () => (await pubOf()) === false, 'profile private saved');
+  click(A, '#s-me .tog[aria-label="پروفایل عمومی"]');
+  await until(async () => (await pubOf()) === true, 'profile public saved');
+  log('صفحهٔ «من»: کلید پروفایل عمومی روی سرور ذخیره شد (خاموش ← روشن)');
+
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));
   ev(A, 'logout()');
