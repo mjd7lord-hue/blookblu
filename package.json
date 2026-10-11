@@ -21,7 +21,8 @@
     "showcase": "tsx scripts/showcase.ts",
     "front:smoke": "tsx scripts/front-smoke.js",
     "admin:smoke": "tsx scripts/admin-smoke.js",
-    "start:server": "node dist/server.js"
+    "start:server": "node dist/server.js",
+    "test:account": "tsx scripts/test-account.ts"
   },
   "license": "UNLICENSED",
   "dependencies": {

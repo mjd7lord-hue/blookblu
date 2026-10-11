@@ -31,6 +31,7 @@ npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQ
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
 npm run admin:grant -- 09xxxxxxxxx   # ادمین کردن کاربر (لغو: --revoke)
+npm run test:account -- 09xxxxxxxxx  # حساب آزمایشی: هر ۶ نقش («آزمایش بلوک») + مدیر ارشد؛ در اپ «نقش‌های من» جابه‌جایی دارد
 npm run sms:test -- 09xxxxxxxxx      # آزمایش پنل پیامک (ملی‌پیامک) با تنظیمات .env
 npm run alert:test                   # آزمایش پیامک هشدار سرور به ALERT_PHONES (ملی‌پیامک: MELIPAYAMAK_FROM لازم)
 npm run front:smoke    # فرانت (../blookblu-front) در jsdom در برابر همین API روی دیتابیس تست — بعد از هر تغییر live.js

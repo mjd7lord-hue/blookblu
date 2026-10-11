@@ -100,7 +100,8 @@ async function uniqueCode(): Promise<string> {
   throw new Error('could not allocate profile code');
 }
 
-export async function createRoleProfile(user: User, role: Role, input: RoleData) {
+/** opts.force فقط برای اسکریپت حساب آزمایشی (scripts/test-account.ts)؛ از API قابل دسترس نیست */
+export async function createRoleProfile(user: User, role: Role, input: RoleData, opts: { force?: boolean } = {}) {
   const [exists] = await db
     .select({ id: profiles.id })
     .from(profiles)
@@ -108,7 +109,7 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData)
     .limit(1);
   if (exists) throw conflict('این نقش را قبلاً ثبت کرده‌اید', 'ROLE_EXISTS');
   // نقش فقط یک بار، هنگام ثبت‌نام (مگر مدیر «چند نقش» را روشن کند)
-  if (!flag('multiRole')) {
+  if (!flag('multiRole') && !opts.force) {
     const [other] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, user.id)).limit(1);
     if (other) throw forbidden('نقش هنگام ثبت‌نام انتخاب می‌شود؛ برای تغییر نقش از پشتیبانی بخواه', 'ROLE_LOCKED');
   }
