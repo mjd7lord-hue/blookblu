@@ -570,3 +570,17 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/urgent/:id/cancel` | — | لغو توسط کارفرما؛ پیشنهادهای بی‌جواب بسته می‌شوند |
 
 تنظیمات (`app_config.limits`): `urgentHours` (اعتبار، پیش‌فرض ۳)، `urgentMaxSend` (حداکثر گیرنده، ۳۰)، `urgentOpen` (درخواست باز هر کارفرما، ۳). انقضا هنگام خواندن اعمال می‌شود.
+
+## درخواست تغییر/افزودن نقش (دور ۳۴)
+
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| GET | `/me/role-requests` | — | `{ items, roleUnlock }` — درخواست‌های من و نقشی که مدیر باز کرده |
+| POST | `/me/role-requests` | `{ toRole, mode: 'switch'\|'add', note? }` | یک درخواست باز در هر زمان (`ROLE_REQUEST_OPEN`)؛ نقش موجود ← `ROLE_EXISTS` |
+| DELETE | `/me/role-requests/:id` | — | لغو درخواست در انتظار |
+| POST | `/admin/panel/role-requests/:id/approve` 🛡 users:2 | `{ mode?, note? }` | `users.role_unlock = toRole` + اعلان؛ کاربر با `POST /me/roles` فرم همان نقش را می‌فرستد ← نقش تازه فعال، درخواست `done`، در `switch` نقش قبلی `isPublic=false` |
+| POST | `/admin/panel/role-requests/:id/reject` 🛡 users:2 | `{ reason }` | رد با دلیل + اعلان |
+| POST | `/admin/panel/users/:id/role-unlock` 🛡 users:2 | `{ role, mode }` | تغییر نقش مستقیم از پنل (ردیف تأییدشده می‌سازد) |
+| POST | `/admin/panel/urgent/:id/cancel` 🛡 ads:2 | `{ reason? }` | لغو درخواست نیروی فوری |
+
+`/admin/panel/snapshot` حالا `roleRequests` (دسترسی کاربران) و `urgent` (دسترسی آگهی‌ها) هم دارد. `GET /me` → `user.roleUnlock`.

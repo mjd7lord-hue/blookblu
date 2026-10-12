@@ -209,6 +209,41 @@ async function user(phone, role, data) {
   await until(async () => JSON.stringify(await call('GET', '/notifications', null, w.token)).includes('تازه‌های بلوک'), 'whats new notification');
   log('تازه‌های بلوک منتشر شد (نسخهٔ', (await call('GET', '/app/config')).whatsNew.v + ') و اعلانش به کاربران رسید');
 
+  // دور ۳۴: درخواست تغییر نقش از اپ ← تأیید از پنل ← کاربر فرم نقش را پر می‌کند
+  const rq = await call('POST', '/me/role-requests', { toRole: 'specialist', note: 'جوشکاری یاد گرفته‌ام' }, w.token);
+  await W.ADMIN_LIVE.reload();
+  ev("go('rolereq')");
+  await until(() => $('page').textContent.includes('جوشکاری یاد گرفته‌ام') && $('page').querySelector('[onclick*="rrApprove"]'), 'role request page');
+  ev(`rrApprove('${rq.request.id}')`);
+  await until(() => $('rrGo'), 'approve modal');
+  $('rrGo').click();
+  await until(async () => (await call('GET', '/me', null, w.token)).user.roleUnlock === 'specialist', 'role unlocked');
+  await call('POST', '/me/roles', { role: 'specialist', data: { fn: 'رضا', ln: 'بهمنی', nat: 'ایرانی', prov: 'هرمزگان', city: 'درگهان', range: 'کل استان', skills: ['جوشکاری و اسکلت فلزی'], exp: '۵ تا ۱۰ سال', cert: 'دارم', rateType: 'روزانه', rate: '۲.۵۰۰.۰۰۰', team: 'تنها', days: [0, 1] } }, w.token);
+  const me2 = await call('GET', '/me', null, w.token);
+  if (me2.user.activeRole !== 'specialist' || me2.profiles.find((p) => p.role === 'worker').isPublic) throw new Error('تغییر نقش کامل نشد');
+  log('تغییر نقش: درخواست کارگر ← تأیید در پنل ← فرم متخصص ← نقش تازه فعال و نقش قبلی پنهان');
+  // تغییر نقش مستقیم از کشوی کاربر
+  ev(`openUser('${w.profile.userId}')`);
+  await until(() => $('drBody') && $('drBody').querySelector('.ur-act'), 'user drawer role button');
+  ev(`userRole('${w.profile.userId}')`);
+  await until(() => $('urGo'), 'role unlock modal');
+  W.document.querySelector('#urR button[data-v="general"]').click();
+  $('urGo').click();
+  await until(async () => !!(await call('GET', '/me', null, w.token)).user.roleUnlock, 'direct role unlock');
+  log('تغییر نقش مستقیم از کشوی کاربر:', (await call('GET', '/me', null, w.token)).user.roleUnlock);
+
+  // نیروی فوری و آماده به کار + محدودیت‌ها
+  ev("go('urgent')");
+  await until(() => $('page').textContent.includes('آماده به کار (روشن)'), 'urgent page');
+  ev("S.f.ugt='ready';rerender()");
+  ev("go('settings')");
+  await until(() => $('lim_urgentHours'), 'limits card');
+  ev("document.getElementById('lim_urgentHours').value='5';limSave()");
+  await until(async () => (await call('GET', '/app/config')).limits.urgentHours === 5, 'limits saved');
+  ev("document.getElementById('lim_urgentHours').value='3';limSave()");
+  await until(async () => (await call('GET', '/app/config')).limits.urgentHours === 3, 'limits restored');
+  log('نیروی فوری و آماده به کار در پنل؛ محدودیت‌ها ذخیره شد (اعتبار درخواست فوری ۵ ← ۳ ساعت)');
+
   ev("go('status')");
   await until(() => $('page').textContent.includes('پایش شبانه‌روزی'), 'status page');
   ev("go('pay')");

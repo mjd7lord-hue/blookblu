@@ -60,6 +60,8 @@ export const users = pgTable('users', {
   status: userStatusEnum('status').notNull().default('active'),
   // کارشناس/ادمین بلوک (فاز ۴) — با npm run admin:grant
   isAdmin: boolean('is_admin').notNull().default(false),
+  // نقشی که مدیر بعد از «درخواست تغییر نقش» باز کرده؛ کاربر یک بار فرم همان نقش را پر می‌کند (دور ۳۴)
+  roleUnlock: roleEnum('role_unlock'),
   // ترجیحات اعلان و نمایش
   prefs: jsonb('prefs').$type<UserPrefs>().notNull().default(sql`'{}'::jsonb`),
   lastSeenAt: ts('last_seen_at'),
@@ -1213,4 +1215,29 @@ export const urgentOffers = pgTable(
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.requestId, t.profileId] }), index('urgent_offers_profile_idx').on(t.profileId, t.status)],
+);
+
+/* ================= دور ۳۴: درخواست تغییر/افزودن نقش ================= */
+// کاربر از اپ درخواست می‌دهد؛ مدیر (دسترسی «کاربران» سطح ۲) تأیید می‌کند ← users.role_unlock؛ کاربر فرم نقش را پر می‌کند ← done
+export const roleRequestStatusEnum = pgEnum('role_request_status', ['pending', 'approved', 'rejected', 'done', 'cancelled']);
+export const roleRequestModeEnum = pgEnum('role_request_mode', ['add', 'switch']);
+export const roleRequests = pgTable(
+  'role_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    fromRole: roleEnum('from_role'),
+    toRole: roleEnum('to_role').notNull(),
+    // add = نقش تازه کنار قبلی؛ switch = نقش قبلی بعد از ثبت نقش تازه از کاوش پنهان می‌شود
+    mode: roleRequestModeEnum('mode').notNull().default('switch'),
+    note: text('note'),
+    status: roleRequestStatusEnum('status').notNull().default('pending'),
+    adminNote: text('admin_note'),
+    decidedBy: uuid('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedAt: ts('decided_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('role_requests_user_idx').on(t.userId, t.status), index('role_requests_status_idx').on(t.status)],
 );

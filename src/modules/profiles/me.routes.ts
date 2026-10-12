@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../../db';
-import { profiles, users, ROLES } from '../../db/schema';
+import { profiles, roleRequests, users, ROLES } from '../../db/schema';
 import { ah, parse } from '../../lib/http';
 import { requireAuth } from '../../middlewares/auth';
-import { forbidden } from '../../lib/errors';
+import { conflict, forbidden } from '../../lib/errors';
 import { trustOf } from './profiles.service';
 import { publicFileUrl } from '../files/files.service';
 import * as svc from './profiles.service';
@@ -31,6 +31,7 @@ r.get(
         activeRole: u.activeRole,
         kycStatus: u.kycStatus,
         isAdmin: u.isAdmin,
+        roleUnlock: u.roleUnlock,
         prefs: u.prefs,
         createdAt: u.createdAt,
       },
@@ -81,6 +82,42 @@ r.post(
     const { role, data } = parse(z.object({ role: z.enum(ROLES), data: z.record(z.unknown()) }), req.body);
     const p = await svc.createRoleProfile(req.user!, role, data);
     res.status(201).json({ profile: p });
+  }),
+);
+
+/** درخواست تغییر/افزودن نقش (جای «پیام به پشتیبانی»)؛ مدیر از پنل تأیید می‌کند */
+r.get(
+  '/role-requests',
+  ah(async (req, res) => {
+    const items = await db.select().from(roleRequests).where(eq(roleRequests.userId, req.user!.id)).orderBy(desc(roleRequests.createdAt)).limit(10);
+    res.json({ items, roleUnlock: req.user!.roleUnlock });
+  }),
+);
+r.post(
+  '/role-requests',
+  ah(async (req, res) => {
+    const b = parse(z.object({ toRole: z.enum(ROLES), mode: z.enum(['add', 'switch']).default('switch'), note: z.string().trim().max(500).optional() }), req.body);
+    const own = await db.select({ role: profiles.role }).from(profiles).where(eq(profiles.userId, req.user!.id));
+    if (own.some((p) => p.role === b.toRole)) throw conflict('این نقش را از قبل داری؛ از «نقش‌های من» فعالش کن', 'ROLE_EXISTS');
+    const [open] = await db
+      .select({ id: roleRequests.id })
+      .from(roleRequests)
+      .where(and(eq(roleRequests.userId, req.user!.id), eq(roleRequests.status, 'pending')))
+      .limit(1);
+    if (open) throw conflict('یک درخواست تغییر نقش در حال بررسی داری', 'ROLE_REQUEST_OPEN');
+    const [rq] = await db
+      .insert(roleRequests)
+      .values({ userId: req.user!.id, fromRole: req.user!.activeRole, toRole: b.toRole, mode: b.mode, note: b.note || null })
+      .returning();
+    res.status(201).json({ request: rq });
+  }),
+);
+r.delete(
+  '/role-requests/:id',
+  ah(async (req, res) => {
+    const id = parse(z.object({ id: z.string().uuid() }), req.params).id;
+    await db.update(roleRequests).set({ status: 'cancelled' }).where(and(eq(roleRequests.id, id), eq(roleRequests.userId, req.user!.id), eq(roleRequests.status, 'pending')));
+    res.json({ ok: true });
   }),
 );
 

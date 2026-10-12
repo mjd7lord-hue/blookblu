@@ -22,7 +22,8 @@
     "front:smoke": "tsx scripts/front-smoke.js",
     "admin:smoke": "tsx scripts/admin-smoke.js",
     "start:server": "node dist/server.js",
-    "test:account": "tsx scripts/test-account.ts"
+    "test:account": "tsx scripts/test-account.ts",
+    "test:projects": "tsx scripts/test-projects.ts"
   },
   "license": "UNLICENSED",
   "dependencies": {

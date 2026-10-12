@@ -524,6 +524,20 @@ async function register(w, role, data) {
   await until(async () => (await pubOf()) === true, 'profile public saved');
   log('صفحهٔ «من»: کلید پروفایل عمومی روی سرور ذخیره شد (خاموش ← روشن)');
 
+  // دور ۳۴: درخواست تغییر نقش از اپ به پنل (نه پیام پشتیبانی) + کارت وضعیت + لغو
+  ev(B, "closeSheet();go('roles')");
+  await until(() => ev(B, "S.cur==='roles'"), 'roles page');
+  ev(B, 'roleChangeReq()');
+  await until(() => B.document.getElementById('rqGo'), 'role request sheet');
+  ev(B, "document.querySelector('#rqR .chip[data-v=\"specialist\"]').click();document.getElementById('rqN').value='جوشکاری هم بلدم';document.getElementById('rqGo').click()");
+  await until(async () => ((await ev(B, "LIVE.api('GET','/me/role-requests')")).items[0] || {}).status === 'pending', 'role request on server');
+  ev(B, "S.rreq.at=0;renderRoles()");
+  await until(() => /در حال بررسی/.test(B.document.getElementById('s-roles').textContent), 'pending card');
+  const rrId = (await ev(B, "LIVE.api('GET','/me/role-requests')")).items[0].id;
+  ev(B, `cancelRoleReq('${rrId}')`);
+  await until(async () => (await ev(B, "LIVE.api('GET','/me/role-requests')")).items[0].status === 'cancelled', 'role request cancelled');
+  log('تغییر نقش از اپ: درخواست به پنل رفت، کارت «در حال بررسی» و لغو');
+
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));
   ev(A, 'logout()');

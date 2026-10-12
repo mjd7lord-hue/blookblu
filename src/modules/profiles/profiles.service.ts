@@ -9,6 +9,7 @@ import {
   profileSkills,
   refreshTokens,
   reviews,
+  roleRequests,
   users,
   type Role,
   type WeekState,
@@ -109,7 +110,9 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData,
     .limit(1);
   if (exists) throw conflict('این نقش را قبلاً ثبت کرده‌اید', 'ROLE_EXISTS');
   // نقش فقط یک بار، هنگام ثبت‌نام (مگر مدیر «چند نقش» را روشن کند)
-  if (!flag('multiRole') && !opts.force) {
+  // نقشی که مدیر بعد از «درخواست تغییر نقش» باز کرده (users.role_unlock) هم مجاز است
+  const unlocked = user.roleUnlock === role;
+  if (!flag('multiRole') && !opts.force && !unlocked) {
     const [other] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, user.id)).limit(1);
     if (other) throw forbidden('نقش هنگام ثبت‌نام انتخاب می‌شود؛ برای تغییر نقش از پشتیبانی بخواه', 'ROLE_LOCKED');
   }
@@ -170,8 +173,19 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData,
 
     await tx
       .update(users)
-      .set({ firstName, lastName, activeRole: role, updatedAt: new Date() })
+      .set({ firstName, lastName, activeRole: role, updatedAt: new Date(), ...(unlocked ? { roleUnlock: null } : {}) })
       .where(eq(users.id, user.id));
+    if (unlocked) {
+      // درخواست تأییدشده ← انجام شد؛ «تغییر» = نقش قبلی از کاوش پنهان
+      const [rq] = await tx
+        .update(roleRequests)
+        .set({ status: 'done' })
+        .where(and(eq(roleRequests.userId, user.id), eq(roleRequests.toRole, role), eq(roleRequests.status, 'approved')))
+        .returning();
+      if (rq?.mode === 'switch' && rq.fromRole && rq.fromRole !== role) {
+        await tx.update(profiles).set({ isPublic: false, updatedAt: new Date() }).where(and(eq(profiles.userId, user.id), eq(profiles.role, rq.fromRole)));
+      }
+    }
     return p;
   });
 }

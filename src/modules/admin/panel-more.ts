@@ -43,6 +43,7 @@ import { emitTo } from '../../lib/events';
 import { metrics } from '../../lib/metrics';
 import { env } from '../../config/env';
 import { perm, requireAdmin, type AdminCtx } from '../../middlewares/auth';
+import { registerRoleRoutes, roleRequestsSection, urgentSection } from './panel-roles';
 import { fileUrl } from '../files/files.service';
 import { notify } from '../notifications/notify';
 import { postMessage } from '../chat/chat.service';
@@ -51,6 +52,7 @@ import { adminLog } from './admin.service';
 
 const r = Router();
 r.use(requireAdmin);
+registerRoleRoutes(r);
 
 const can = (a: AdminCtx, m: AdminModule, lvl = 1) => (a.perms[m] ?? 0) >= lvl;
 const inList = (col: SQL | Parameters<typeof inArray>[0], list: string[]) => sql`${col} in (${sql.join(list.map((p) => sql`${p}`), sql`, `)})`;
@@ -630,4 +632,6 @@ export function moreSections(a: AdminCtx, add: (key: string, m: AdminModule | nu
   add('tx', 'pay', () => txSection(a));
   add('status', 'status', () => statusSection());
   add('sessions', 'admins', () => sessionsSection());
+  add('roleRequests', 'users', () => roleRequestsSection());
+  add('urgent', 'ads', () => urgentSection(a));
 }
