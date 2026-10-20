@@ -622,3 +622,5 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | GET | `/admin/panel/live` | dash:1 | `online { now, members, guests }`، `visits { today, month (۳۰ روز), total, daily[30] }`، `events` (رخدادهای واقعی ۷ روز اخیر) |
 
 snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, signed }, events` دارد. پاسخ تخصصی با دست‌کم یک «مفید بود» = +۱ در `trust_adj` (تا ۵) و اعلان برای پاسخ‌دهنده.
+
+ادمین (دور ۴۰): `POST /admin/panel/users/:id/verify-identity` `{ note? }` (kyc:2) — تأیید دستی هویت کاربری که به‌جای «تأیید هویت» فقط «کارت ملی» (مدرک گروه «هویت») فرستاده؛ بدون مدرک: `NO_ID_DOCUMENT`. snapshot کاربران `profile.avatarUrl` دارد (پنل عکس را نشان می‌دهد).

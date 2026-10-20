@@ -8,7 +8,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { profiles, projects, roleRequests, ROLES, strikes, urgentOffers, urgentRequests, users } from '../../db/schema';
+import { documents, profiles, projects, roleRequests, ROLES, strikes, urgentOffers, urgentRequests, users } from '../../db/schema';
 import { alias } from 'drizzle-orm/pg-core';
 import { confirmStrike, recomputeTrust } from '../trust/strikes';
 import { ah, parse, uuidParam } from '../../lib/http';
@@ -82,6 +82,35 @@ async function unlockRole(adminUser: { id: string }, userId: string, toRole: str
 }
 
 export function registerRoleRoutes(r: Router) {
+  /**
+   * تأیید دستی هویت (دور ۴۰): کاربری که به‌جای «تأیید هویت» (کارت + سلفی) فقط «کارت ملی» را در «مدارک من» فرستاده.
+   * فقط اگر مدرک گروه «هویت» (در انتظار یا تأییدشده) دارد؛ مدارک هویتِ در انتظار هم تأیید می‌شوند.
+   */
+  r.post(
+    '/users/:id/verify-identity',
+    perm('kyc', 2),
+    ah(async (req, res) => {
+      const { id } = parse(uuidParam, req.params);
+      const b = parse(z.object({ note: z.string().trim().max(300).optional() }), req.body ?? {});
+      const [u] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      if (!u) throw notFound('کاربر پیدا نشد');
+      if (u.kycStatus === 'verified') throw conflict('هویت این کاربر از قبل تأیید شده', 'ALREADY_VERIFIED');
+      const ids = await db
+        .select({ id: documents.id, status: documents.status })
+        .from(documents)
+        .where(and(eq(documents.userId, id), eq(documents.group, 'هویت'), inArray(documents.status, ['pending', 'approved'])));
+      if (!ids.length) throw badRequest('این کاربر مدرک هویتی (کارت ملی) نفرستاده؛ اول باید در اپ «تأیید هویت» را انجام دهد', 'NO_ID_DOCUMENT');
+      await db.transaction(async (tx) => {
+        await tx.update(users).set({ kycStatus: 'verified', updatedAt: new Date() }).where(eq(users.id, id));
+        const pend = ids.filter((x) => x.status === 'pending').map((x) => x.id);
+        if (pend.length) await tx.update(documents).set({ status: 'approved', reviewedBy: req.user!.id, reviewedAt: new Date() }).where(inArray(documents.id, pend));
+        await adminLog(tx, req.user!, 'kyc.manual', 'user', id, b.note || 'تأیید دستی بر اساس مدرک «کارت ملی»');
+      });
+      await notify(id, { type: 'id', title: 'هویت شما تأیید شد', body: 'مهر «هویت تأیید شد» روی شناسنامهٔ کاری‌ات خورد و ۱۰ امتیاز اعتبار گرفتی.', link: { screen: 'trust' } });
+      res.json({ ok: true });
+    }),
+  );
+
   /** تصمیم مدیر دربارهٔ اخطار بدقولی: تأیید (اثر کامل) یا رد (پاک از امتیاز) */
   r.post(
     '/strikes/:id/decide',
