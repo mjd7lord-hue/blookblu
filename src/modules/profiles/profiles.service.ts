@@ -30,11 +30,14 @@ type Profile = typeof profiles.$inferSelect;
 
 /* ---------- امتیاز اعتبار (همان فرمول اپ) ---------- */
 // رضایت (۵۵) + پروژهٔ انجام‌شده (۲۵) + تعداد نظر (۱۰) + احراز هویت (۱۰) = ۱۰۰
-export function trustOf(p: Pick<Profile, 'ratingAvg' | 'ratingCount' | 'doneCount'> & { trustAdj?: number | null }, kycVerified: boolean) {
+export function trustOf(p: Pick<Profile, 'ratingAvg' | 'ratingCount' | 'doneCount'> & { trustAdj?: number | null; verified?: boolean | null }, kycVerified: boolean) {
   const satisfaction = Math.round((p.ratingAvg / 5) * 55);
   const projects = Math.min(25, p.doneCount);
   const reviewsPart = Math.min(10, Math.round(p.ratingCount / 2));
   const identity = kycVerified ? 10 : 0;
+  // دور ۴۱: شروع بهتر — ثبت‌نام کامل +۱۰، مدرک تأییدشده (نشان «مدرک‌دار») +۵؛ با تأیید هویت دست‌کم ۲۵
+  const start = 10;
+  const docs = p.verified ? 5 : 0;
   // دور ۳۶: +۵ قیم معتبر، −۱۰ هر اخطار بدقولی، −۵ اخطار کسی که قیمش هستی (profiles.trust_adj)
   const adj = p.trustAdj ?? 0;
   return {
@@ -43,7 +46,9 @@ export function trustOf(p: Pick<Profile, 'ratingAvg' | 'ratingCount' | 'doneCoun
     reviews: reviewsPart,
     identity,
     adj,
-    total: Math.max(0, Math.min(100, satisfaction + projects + reviewsPart + identity + adj)),
+    start,
+    docs,
+    total: Math.max(0, Math.min(100, satisfaction + projects + reviewsPart + identity + start + docs + adj)),
   };
 }
 
@@ -404,7 +409,7 @@ export async function publicProfile(code: string, viewer?: User) {
     reviewsCount: p.ratingCount,
     doneCount: p.doneCount,
     trust: trustOf(p, kycVerified),
-    // اخطار بدقولی فعال (۶ ماه اخیر) — شفاف روی شناسنامهٔ کاری
+    // اخطار بدقولی فعال (ماه اخیر) — شفاف روی شناسنامهٔ کاری
     strikes: await strikeCount(p.id),
     // ۵ ستاره تا ۱ ستاره
     stars: [5, 4, 3, 2, 1].map((s) => stars.find((x) => x.rating === s)?.n ?? 0),
@@ -490,6 +495,7 @@ export async function searchProfiles(
   return rows.map(({ kyc, avatarFileId, trustAdj, ...r }) => ({
     ...r,
     avatarUrl: publicFileUrl(avatarFileId),
-    trust: trustOf({ ratingAvg: r.rating, ratingCount: r.reviewsCount, doneCount: r.doneCount, trustAdj }, kyc === 'verified').total,
+    trust: trustOf({ ratingAvg: r.rating, ratingCount: r.reviewsCount, doneCount: r.doneCount, trustAdj, verified: r.verified }, kyc === 'verified').total,
+    identityVerified: kyc === 'verified',
   }));
 }

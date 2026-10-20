@@ -73,7 +73,7 @@ describe('bad faith (بدقولی): report, reply, mutual/unilateral cancel, gua
     expect((await trustOf(b.w.profile.code)).strikes).toBe(1);
   });
 
-  it('silence for 24h = confirmed; 2 strikes in 90 days = no ready-to-work; admin can dismiss', async () => {
+  it('silence for 24h = confirmed; 3 strikes in 60 days = no ready-to-work; admin can dismiss', async () => {
     const a = await makeProject();
     await signBoth(a.pid, a.boss, a.w);
     const rep = await api().post(`/api/projects/${a.pid}/report`).set(auth(a.boss.token)).send({ kind: 'breach', note: 'کار را نیمه رها کرد' });
@@ -84,16 +84,25 @@ describe('bad faith (بدقولی): report, reply, mutual/unilateral cancel, gua
     // کارفرما بعد از بدقولی، بدون اخطار لغو می‌کند؛ بعد اخطار دوم برای همان متخصص در پروژهٔ دیگر
     expect((await api().post(`/api/projects/${a.pid}/cancel`).set(auth(a.boss.token)).send({ reason: 'کار رها شد' })).body.strike).toBe(false);
     const boss2 = a.boss;
-    const c = await api().post('/api/conversations').set(auth(boss2.token)).send({ profileCode: a.w.profile.code });
-    const deal = await api()
-      .post(`/api/conversations/${c.body.conversation.id}/deals`)
-      .set(auth(a.w.token))
-      .send({ job: 'کاشی‌کاری', price: '۵٬۰۰۰٬۰۰۰ تومان', amount: '۵٬۰۰۰٬۰۰۰', start: 'شنبه', durationDays: 2, plan: [{ title: 'پایان کار', pct: 100 }] });
-    if (!deal.body.message) throw new Error(JSON.stringify(deal.body));
-    const acc = await api().post(`/api/messages/${deal.body.message.id}/answer`).set(auth(boss2.token)).send({ status: 'accepted' });
-    const pid2 = acc.body.project.id;
-    await signBoth(pid2, boss2, a.w);
-    await api().post(`/api/projects/${pid2}/cancel`).set(auth(a.w.token)).send({ reason: 'نمی‌رسم', force: true }).expect(200);
+    // اخطار دوم و سوم: لغو یک‌طرفهٔ دو قرارداد امضاشدهٔ دیگر
+    const forceCancel = async (job: string) => {
+      const c = await api().post('/api/conversations').set(auth(boss2.token)).send({ profileCode: a.w.profile.code });
+      const deal = await api()
+        .post(`/api/conversations/${c.body.conversation.id}/deals`)
+        .set(auth(a.w.token))
+        .send({ job, price: '۵٬۰۰۰٬۰۰۰ تومان', amount: '۵٬۰۰۰٬۰۰۰', start: 'شنبه', durationDays: 2, plan: [{ title: 'پایان کار', pct: 100 }] });
+      if (!deal.body.message) throw new Error(JSON.stringify(deal.body));
+      const acc = await api().post(`/api/messages/${deal.body.message.id}/answer`).set(auth(boss2.token)).send({ status: 'accepted' });
+      const pid = acc.body.project.id;
+      await signBoth(pid, boss2, a.w);
+      await api().post(`/api/projects/${pid}/cancel`).set(auth(a.w.token)).send({ reason: 'نمی‌رسم', force: true }).expect(200);
+    };
+    await forceCancel('کاشی‌کاری');
+    // ۲ اخطار هنوز «آماده به کار» را نمی‌بندد
+    const ok2 = await api().post('/api/ads').set(auth(a.w.token)).send({ type: 'work', title: 'آماده به کار آرماتور', province: 'هرمزگان', city: 'قشم', audience: ['contractor'] });
+    expect(ok2.status).toBe(201);
+    await api().patch(`/api/ads/${ok2.body.ad.id}`).set(auth(a.w.token)).send({ status: 'closed' }).expect(200);
+    await forceCancel('سنگ‌کاری');
 
     const ready = await api().post('/api/ads').set(auth(a.w.token)).send({ type: 'work', title: 'آماده به کار کاشی', province: 'هرمزگان', city: 'قشم', audience: ['contractor'] });
     expect(ready.body.error.code).toBe('RESTRICTED');
@@ -102,9 +111,9 @@ describe('bad faith (بدقولی): report, reply, mutual/unilateral cancel, gua
     const [o] = await db.update(users).set({ isAdmin: true }).where(eq(users.id, a.boss.profile.userId)).returning();
     expect(o.isAdmin).toBe(true);
     const snap = await api().get('/api/admin/panel/snapshot').set(auth(a.boss.token));
-    expect(snap.body.strikes.length).toBeGreaterThanOrEqual(2);
+    expect(snap.body.strikes.length).toBeGreaterThanOrEqual(3);
     await api().post(`/api/admin/panel/strikes/${rep.body.strike.id}/decide`).set(auth(a.boss.token)).send({ confirm: false, note: 'مدرک کافی نبود' }).expect(200);
-    expect((await trustOf(a.w.profile.code)).strikes).toBe(1);
+    expect((await trustOf(a.w.profile.code)).strikes).toBe(2);
   });
 
   it('my contracts archive and locked main info', async () => {

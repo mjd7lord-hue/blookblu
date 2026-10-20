@@ -80,7 +80,7 @@ describe('role registration & profiles', () => {
     // نیم‌فاصله و ارقام فارسی دست‌نخورده می‌مانند
     expect(pub.body.profile.skills.map((s: { title: string }) => s.title)).toContain('بتن\u200cریزی');
     expect(pub.body.profile.data.exp).toBe('۵ تا ۱۰ سال');
-    expect(pub.body.profile.trust.total).toBe(0);
+    expect(pub.body.profile.trust.total).toBe(10); // فقط امتیاز ثبت‌نام
   });
 
   it('private profile is hidden; showPhone reveals phone only to logged-in users', async () => {

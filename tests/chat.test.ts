@@ -112,7 +112,7 @@ describe('chat, deals, projects', () => {
     await api().post(`/api/projects/${pid}/review`).set(auth(w.token)).send({ rating: 4 });
 
     const wp = await api().get(`/api/profiles/${w.profile.code}`);
-    expect(wp.body.profile.trust).toMatchObject({ satisfaction: 55, projects: 1, reviews: 1, total: 57 });
+    expect(wp.body.profile.trust).toMatchObject({ satisfaction: 55, projects: 1, reviews: 1, start: 10, total: 67 }); // ۵۵ + ۱ + ۱ + ۱۰ امتیاز ثبت‌نام
     expect(wp.body.profile.reviews[0].text).toBe('دقیق و منظم');
     const bp = await api().get(`/api/profiles/${boss.profile.code}`);
     expect(bp.body.profile.rating).toBe(4);

@@ -150,7 +150,8 @@ export function shapeAuthor(a: {
     ...rest,
     avatarUrl: publicFileUrl(avatarFileId),
     rating: Math.round(a.rating * 10) / 10,
-    trust: trustOf({ ratingAvg: a.rating, ratingCount: a.reviewsCount, doneCount: a.doneCount, trustAdj }, kyc === 'verified').total,
+    trust: trustOf({ ratingAvg: a.rating, ratingCount: a.reviewsCount, doneCount: a.doneCount, trustAdj, verified: a.verified }, kyc === 'verified').total,
+    identityVerified: kyc === 'verified',
   };
 }
 

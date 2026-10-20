@@ -145,7 +145,7 @@ export const profiles = pgTable(
     avatarFileId: uuid('avatar_file_id').references((): AnyPgColumn => files.id, { onDelete: 'set null' }),
     // اصلاح امتیاز اعتبار (دور ۳۶): +۵ قیم معتبر، −۱۰ هر اخطار بدقولی فعال، −۵ هر اخطار کسی که قیمش هستم
     trustAdj: smallint('trust_adj').notNull().default(0),
-    // تا این زمان «آماده به کار» و نیروی فوری بسته است (۲ اخطار در ۹۰ روز)
+    // تا این زمان «آماده به کار» و نیروی فوری بسته است (۳ اخطار در ۲ ماه)
     restrictedUntil: ts('restricted_until'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -1272,7 +1272,7 @@ export const strikes = pgTable(
     respondBy: ts('respond_by'),
     decidedAt: ts('decided_at'),
     decidedBy: uuid('decided_by').references(() => users.id, { onDelete: 'set null' }),
-    // اخطار تأییدشده ۶ ماه بعد از امتیاز برمی‌گردد
+    // اخطار تأییدشده ۱ ماه بعد از امتیاز برمی‌گردد
     expiresAt: ts('expires_at'),
     createdAt: createdAt(),
   },

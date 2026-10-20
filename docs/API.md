@@ -600,7 +600,7 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/strikes/:id/respond` | `{ accept, reply? }` | فقط متهم و فقط `pending`؛ قبول = `confirmed`، اعتراض (`reply` لازم) = `disputed` برای مدیر |
 | GET | `/me/contracts` | — | بایگانی همهٔ قراردادهای من: `number, status, title, amount, myRole, myProfileRole, other, signed{client,provider}, project{id,status,stage}, printUrl` |
 
-قانون: اخطار تأییدشده ۶ ماه (`expiresAt`) −۱۰ اعتبار؛ بی‌جواب بعد از ۲۴ ساعت خودکار تأیید (جاروی ۱۵ دقیقه‌ای `sweepStrikes`)؛ ۲ اخطار در ۹۰ روز ← `profiles.restricted_until` (۷ روز): آگهی «آماده به کار» بسته و ساخت/روشن کردنش و نیروی فوری `RESTRICTED`؛ ۳ اخطار فعال ← `users.status = suspended`. پروفایل عمومی: `strikes` (تعداد فعال). قرارداد تازه: مادهٔ «خوش‌قولی و لغو».
+قانون (دور ۴۱): اخطار تأییدشده ۱ ماه (`expiresAt`) −۱۰ اعتبار؛ بی‌جواب بعد از ۲۴ ساعت خودکار تأیید (جاروی ۱۵ دقیقه‌ای `sweepStrikes`)؛ ۳ اخطار در ۲ ماه ← `profiles.restricted_until` (۷ روز): آگهی «آماده به کار» بسته و ساخت/روشن کردنش و نیروی فوری `RESTRICTED`؛ ۵ اخطار فعال ← `users.status = suspended`. پروفایل عمومی: `strikes` (تعداد فعال). قرارداد تازه: مادهٔ «خوش‌قولی و لغو».
 اطلاعات اصلی بعد از ثبت‌نام (`locked` در forms.ts: نام، تابعیت و مدرک اقامت، سال تولد، شمارهٔ نظام، مشخصات ثبتی شرکت) فقط با پشتیبانی عوض می‌شود: `FIELD_LOCKED` (فیلد خالی را می‌شود یک بار پر کرد).
 
 ادمین: snapshot بخش `strikes` (دسترسی reports) · `POST /admin/panel/strikes/:id/decide` `{ confirm, note? }` (reports:2). `limits` در app_config: `guarMinDone, guarMinTrust, guarMinDays, guarMax`.
@@ -624,3 +624,5 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, signed }, events` دارد. پاسخ تخصصی با دست‌کم یک «مفید بود» = +۱ در `trust_adj` (تا ۵) و اعلان برای پاسخ‌دهنده.
 
 ادمین (دور ۴۰): `POST /admin/panel/users/:id/verify-identity` `{ note? }` (kyc:2) — تأیید دستی هویت کاربری که به‌جای «تأیید هویت» فقط «کارت ملی» (مدرک گروه «هویت») فرستاده؛ بدون مدرک: `NO_ID_DOCUMENT`. snapshot کاربران `profile.avatarUrl` دارد (پنل عکس را نشان می‌دهد).
+
+امتیاز اعتبار (دور ۴۱): `trust = { satisfaction(۵۵), projects(۲۵), reviews(۱۰), identity(۱۰), start(۱۰ ثبت‌نام), docs(۵ مدرک تأییدشده), adj, total }`؛ total بین ۰ و ۱۰۰. نویسندهٔ آگهی و نتیجهٔ جست‌وجو `identityVerified` هم دارند.

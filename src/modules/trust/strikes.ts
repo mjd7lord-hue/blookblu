@@ -14,10 +14,10 @@ import { logger } from '../../lib/logger';
  * - طرف مقابل «سر کار نیامد/بدقولی» ثبت می‌کند ← متهم ۲۴ ساعت فرصت دارد قبول یا اعتراض کند؛ بی‌جواب = قبول.
  * - اعتراض ← مدیر بررسی می‌کند (یا حل اختلاف).
  * - لغو یک‌طرفه بعد از امضای قرارداد = اخطار فوری برای لغوکننده؛ لغو با توافق دوطرف = بدون اخطار.
- * - هر اخطار تأییدشده: −۱۰ امتیاز اعتبار به مدت ۶ ماه؛ قیم‌های او هر کدام −۵.
- * - ۲ اخطار در ۹۰ روز: «آماده به کار» و نیروی فوری ۷ روز بسته · ۳ اخطار فعال: حساب معلق تا بررسی مدیر.
+ * - هر اخطار تأییدشده: −۱۰ امتیاز اعتبار به مدت ۱ ماه؛ قیم‌های او هر کدام −۵.
+ * - ۳ اخطار در ۲ ماه: «آماده به کار» و نیروی فوری ۷ روز بسته · ۵ اخطار فعال: حساب معلق تا بررسی مدیر.
  */
-export const STRIKE = { helpfulMax: 5, penalty: 10, guarantorPenalty: 5, guarantorBonus: 5, replyHours: 24, months: 6, restrictDays: 7, restrictAfter: 2, suspendAfter: 3 };
+export const STRIKE = { helpfulMax: 5, penalty: 10, guarantorPenalty: 5, guarantorBonus: 5, replyHours: 24, days: 30, windowDays: 60, restrictDays: 7, restrictAfter: 3, suspendAfter: 5 };
 
 export const KIND_FA: Record<string, string> = { no_show: 'سر کار نیامد', cancel: 'لغو یک‌طرفهٔ قرارداد', breach: 'عمل نکردن به قرارداد' };
 
@@ -52,7 +52,7 @@ async function guarantorProfiles(profileId: string) {
 export async function confirmStrike(id: string, decidedBy?: string) {
   const [s] = await db
     .update(strikes)
-    .set({ status: 'confirmed', decidedAt: new Date(), decidedBy: decidedBy ?? null, expiresAt: new Date(Date.now() + STRIKE.months * 30 * 86400_000) })
+    .set({ status: 'confirmed', decidedAt: new Date(), decidedBy: decidedBy ?? null, expiresAt: new Date(Date.now() + STRIKE.days * 86400_000) })
     .where(and(eq(strikes.id, id), inArray(strikes.status, ['pending', 'disputed'])))
     .returning();
   if (!s) return null;
@@ -63,20 +63,20 @@ export async function confirmStrike(id: string, decidedBy?: string) {
 
   const [{ recent, active }] = await db
     .select({
-      recent: sql<number>`count(*) filter (where ${strikes.createdAt} > now() - interval '90 days')::int`,
+      recent: sql<number>`count(*) filter (where ${strikes.createdAt} > now() - interval '60 days')::int`,
       active: sql<number>`count(*)::int`,
     })
     .from(strikes)
     .where(and(eq(strikes.profileId, p.id), eq(strikes.status, 'confirmed'), gt(strikes.expiresAt, new Date())));
 
-  let extra = `${STRIKE.penalty} امتیاز از اعتبارت کم شد (تا ${STRIKE.months} ماه).`;
+  let extra = `${STRIKE.penalty} امتیاز از اعتبارت کم شد (تا ۱ ماه).`;
   if (active >= STRIKE.suspendAfter) {
     await db.update(users).set({ status: 'suspended', updatedAt: new Date() }).where(eq(users.id, p.userId));
-    extra += ' به‌خاطر ۳ اخطار، حساب تا بررسی مدیر معلق شد.';
+    extra += ' به‌خاطر ۵ اخطار، حساب تا بررسی مدیر معلق شد.';
   } else if (recent >= STRIKE.restrictAfter) {
     await db.update(profiles).set({ restrictedUntil: new Date(Date.now() + STRIKE.restrictDays * 86400_000) }).where(eq(profiles.id, p.id));
     await db.update(ads).set({ status: 'closed', updatedAt: new Date() }).where(and(eq(ads.profileId, p.id), eq(ads.type, 'work'), eq(ads.status, 'active')));
-    extra += ` به‌خاطر ۲ اخطار در ۹۰ روز، «آماده به کار» و نیروی فوری ${STRIKE.restrictDays} روز بسته شد.`;
+    extra += ` به‌خاطر ۳ اخطار در ۲ ماه، «آماده به کار» و نیروی فوری ${STRIKE.restrictDays} روز بسته شد.`;
   }
   await notify(p.userId, { type: 'id', title: `اخطار بدقولی ثبت شد: ${KIND_FA[s.kind]}`, body: extra, link: { screen: 'trust' } });
   for (const g of new Map(gs.map((x) => [x.userId, x])).values()) {
