@@ -119,7 +119,7 @@ const ROLES = {
   await sleep(1500);
   const demo = new Set();
   // فقط نام‌ها و عنوان‌های چندکلمه‌ای (کلمهٔ تکی مثل «آرماتوربند» مهارت است، نه دادهٔ نمایشی)
-  const add = (s) => { s = String(s || '').trim(); if (s.length >= 7 && /[آ-ی]/.test(s) && /\s/.test(s)) demo.add(s); };
+  const add = (s) => { s = String(s || '').trim(); if (s.length >= 7 && /[آ-ی]/.test(s) && /\s/.test(s) && !/(پیش|بعد)$|^(امروز|دیروز|همین)/.test(s)) demo.add(s); };
   ev(D, 'Object.values(P).map(p=>p.name)').forEach(add);
   ev(D, "Object.values(P).flatMap(p=>[p.bio,p.title])").forEach(add);
   ev(D, 'ADS.map(a=>a.title)').forEach(add);
