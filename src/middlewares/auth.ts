@@ -4,6 +4,7 @@ import { db } from '../db';
 import { adminRoles, admins, users, profiles, type AdminModule, type AdminPerms } from '../db/schema';
 import { verifyAccess } from '../lib/jwt';
 import { forbidden, unauthorized, AppError } from '../lib/errors';
+import { touchUser } from '../lib/presence';
 
 type UserRow = typeof users.$inferSelect;
 type ProfileRow = typeof profiles.$inferSelect;
@@ -25,6 +26,8 @@ async function loadUser(req: Request): Promise<UserRow | null> {
   const [u] = await db.select().from(users).where(eq(users.id, p.sub)).limit(1);
   if (!u || u.status === 'deleted') throw unauthorized('حساب پیدا نشد', 'TOKEN_INVALID');
   if (u.status === 'suspended') throw new AppError(403, 'SUSPENDED', 'حساب شما موقتاً مسدود است؛ با پشتیبانی تماس بگیرید');
+  // «آخرین فعالیت» واقعی (نه فقط زمان ورود)
+  touchUser(u.id);
   return u;
 }
 

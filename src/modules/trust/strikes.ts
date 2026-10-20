@@ -17,7 +17,7 @@ import { logger } from '../../lib/logger';
  * - هر اخطار تأییدشده: −۱۰ امتیاز اعتبار به مدت ۶ ماه؛ قیم‌های او هر کدام −۵.
  * - ۲ اخطار در ۹۰ روز: «آماده به کار» و نیروی فوری ۷ روز بسته · ۳ اخطار فعال: حساب معلق تا بررسی مدیر.
  */
-export const STRIKE = { penalty: 10, guarantorPenalty: 5, guarantorBonus: 5, replyHours: 24, months: 6, restrictDays: 7, restrictAfter: 2, suspendAfter: 3 };
+export const STRIKE = { helpfulMax: 5, penalty: 10, guarantorPenalty: 5, guarantorBonus: 5, replyHours: 24, months: 6, restrictDays: 7, restrictAfter: 2, suspendAfter: 3 };
 
 export const KIND_FA: Record<string, string> = { no_show: 'سر کار نیامد', cancel: 'لغو یک‌طرفهٔ قرارداد', breach: 'عمل نکردن به قرارداد' };
 
@@ -26,13 +26,15 @@ export async function recomputeTrust(profileIds?: string[]) {
   if (profileIds && !profileIds.length) return;
   const adj = sql`(
     (case when exists (select 1 from guarantees g where g.profile_id = "profiles"."id" and g.status = 'accepted') then ${STRIKE.guarantorBonus} else 0 end)
+    -- دور ۳۹: هر پاسخ تخصصی که دست‌کم یک «مفید بود» گرفته +۱ (تا ۵)
+    + least(${STRIKE.helpfulMax}, (select count(*) from ad_responses r join ads a on a.id = r.ad_id where r.profile_id = "profiles"."id" and a.type = 'consult' and exists (select 1 from answer_votes v where v.response_id = r.id and v.value > 0)))
     - ${STRIKE.penalty} * (select count(*) from strikes s where s.profile_id = "profiles"."id" and s.status = 'confirmed' and s.expires_at > now())
     - ${STRIKE.guarantorPenalty} * (select count(*) from strikes s join guarantees g on g.profile_id = s.profile_id and g.status = 'accepted' and g.responded_at <= s.created_at
         where g.guarantor_user_id = "profiles"."user_id" and s.status = 'confirmed' and s.expires_at > now())
   )::smallint`;
   const where = profileIds
     ? inArray(profiles.id, profileIds)
-    : sql`(${profiles.trustAdj} <> 0 or exists (select 1 from guarantees g where g.profile_id = "profiles"."id" and g.status = 'accepted'))`;
+    : sql`(${profiles.trustAdj} <> 0 or exists (select 1 from guarantees g where g.profile_id = "profiles"."id" and g.status = 'accepted') or exists (select 1 from ad_responses r join answer_votes v on v.response_id = r.id where r.profile_id = "profiles"."id" and v.value > 0))`;
   await db.update(profiles).set({ trustAdj: adj }).where(where);
 }
 

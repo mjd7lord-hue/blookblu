@@ -1,4 +1,4 @@
-import { assertNotRestricted } from '../trust/strikes';
+import { assertNotRestricted, recomputeTrust } from '../trust/strikes';
 import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
 import { adResponses, ads, answerVotes, conversationMembers, conversations, profiles, users, type Role } from '../../db/schema';
@@ -274,7 +274,7 @@ export async function publicAnswers(adId: string, viewer?: User) {
 /** رأی «مفید بود / نبود» به پاسخ پرسش تخصصی؛ value=0 یعنی برداشتن رأی */
 export async function voteAnswer(user: User, responseId: string, value: -1 | 0 | 1) {
   const [row] = await db
-    .select({ type: ads.type, owner: profiles.userId })
+    .select({ type: ads.type, owner: profiles.userId, profileId: adResponses.profileId, title: ads.title })
     .from(adResponses)
     .innerJoin(ads, eq(ads.id, adResponses.adId))
     .innerJoin(profiles, eq(profiles.id, adResponses.profileId))
@@ -292,6 +292,16 @@ export async function voteAnswer(user: User, responseId: string, value: -1 | 0 |
     .select({ up: sql<number>`count(*) filter (where ${answerVotes.value} > 0)::int`, down: sql<number>`count(*) filter (where ${answerVotes.value} < 0)::int` })
     .from(answerVotes)
     .where(eq(answerVotes.responseId, responseId));
+  // دور ۳۹: پاسخ مفید = امتیاز اعتبار (+۱ برای هر پاسخ با دست‌کم یک لایک، تا ۵)
+  await recomputeTrust([row.profileId]);
+  if (value === 1 && c.up === 1) {
+    await notify(row.owner, {
+      type: 'star',
+      title: 'پاسخت «مفید» بود',
+      body: `پاسخ تو به «${row.title}» اولین لایک را گرفت؛ ۱ امتیاز به اعتبارت اضافه شد (تا ۵ امتیاز از پاسخ‌های مفید).`,
+      link: { screen: 'trust' },
+    });
+  }
   return { up: c.up, down: c.down, score: c.up - c.down, myVote: value };
 }
 

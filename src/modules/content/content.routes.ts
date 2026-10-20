@@ -13,8 +13,20 @@ import { badRequest, notFound } from '../../lib/errors';
 import { cfg } from '../../lib/appConfig';
 import { optionalAuth, requireAuth, requireProfile } from '../../middlewares/auth';
 import { supportConversation } from '../chat/chat.service';
+import { ping } from '../../lib/presence';
 
 const r = Router();
+
+/** حضور و بازدید (دور ۳۹): اپ با باز شدن و هر ۶۰ ثانیه می‌زند؛ v = شناسهٔ تصادفی مرورگر */
+r.post(
+  '/ping',
+  optionalAuth,
+  ah(async (req, res) => {
+    const b = parse(z.object({ v: z.string().regex(/^[A-Za-z0-9_-]{8,40}$/), view: z.boolean().optional() }), req.body);
+    await ping(b.v, req.user?.id ?? null, !!b.view);
+    res.json({ ok: true });
+  }),
+);
 
 export function publicConfig() {
   const s = cfg('settings');

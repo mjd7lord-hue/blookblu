@@ -43,6 +43,7 @@ import { emitTo } from '../../lib/events';
 import { metrics } from '../../lib/metrics';
 import { env } from '../../config/env';
 import { perm, requireAdmin, type AdminCtx } from '../../middlewares/auth';
+import { registerLiveRoutes } from './panel-live';
 import { registerRoleRoutes, roleRequestsSection, strikesSection, urgentSection } from './panel-roles';
 import { fileUrl } from '../files/files.service';
 import { notify } from '../notifications/notify';
@@ -53,6 +54,7 @@ import { adminLog } from './admin.service';
 const r = Router();
 r.use(requireAdmin);
 registerRoleRoutes(r);
+registerLiveRoutes(r);
 
 const can = (a: AdminCtx, m: AdminModule, lvl = 1) => (a.perms[m] ?? 0) >= lvl;
 const inList = (col: SQL | Parameters<typeof inArray>[0], list: string[]) => sql`${col} in (${sql.join(list.map((p) => sql`${p}`), sql`, `)})`;

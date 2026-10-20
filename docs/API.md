@@ -613,3 +613,12 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | DELETE | `/me/sessions/:id` | — | خروج از یک دستگاه |
 | POST | `/me/sessions/revoke-others` | `{ refreshToken }` | خروج از همهٔ دستگاه‌ها جز همین |
 | GET | `/me/referrals` | — | کسانی که با کد معرفی یکی از نقش‌های من (`data.ref`) ثبت‌نام کرده‌اند |
+
+
+## حضور و آمار زندهٔ پنل (دور ۳۹)
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| POST | `/app/ping` (ورود اختیاری) | `{ v, view? }` | v = شناسهٔ تصادفی مرورگر (۸ تا ۴۰ حرف)؛ view=true یعنی یک بازدید تازه. «آنلاین» = پینگ در ۲ دقیقهٔ اخیر |
+| GET | `/admin/panel/live` | dash:1 | `online { now, members, guests }`، `visits { today, month (۳۰ روز), total, daily[30] }`، `events` (رخدادهای واقعی ۷ روز اخیر) |
+
+snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, signed }, events` دارد. پاسخ تخصصی با دست‌کم یک «مفید بود» = +۱ در `trust_adj` (تا ۵) و اعلان برای پاسخ‌دهنده.

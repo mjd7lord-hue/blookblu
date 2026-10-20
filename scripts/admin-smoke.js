@@ -96,10 +96,25 @@ async function user(phone, role, data) {
   log('ورود مدیر با کد پیامکی ← داشبورد · مدیر:', ev('ME().n'), '· نقش:', ev('AROLES[ME().role].n'));
   log('دادهٔ واقعی: کاربران', ev('U.length'), '· نقش‌ها', ev('Object.keys(AROLES).length'), '· بخش‌های منو', ev("document.querySelectorAll('#side .sb-it:not([disabled])').length"));
 
+  // داشبورد واقعی: بازدید، قیف، رویدادها
+  await fetch(API + '/api/app/ping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ v: 'smoke' + Date.now(), view: true }) });
+  await W.ADMIN_LIVE.reload(); ev("go('dash')");
+  await until(() => $('vis39') && $('page').textContent.includes('اعلام آمادگی / پاسخ') && $('feed') && /ثبت‌نام کرد/.test($('feed').textContent), 'real dashboard');
+  log('داشبورد واقعی: بازدید امروز', $('vis39').querySelectorAll('.kpirow b')[1].textContent, '· رویداد:', $('feed').querySelector('.t').textContent.slice(0, 50));
+
   // احراز هویت: تأیید مدرک کارگر
   const wid = w.profile.userId;
   ev("go('kyc')");
   await until(() => $('page').textContent.includes('رضا بهمنی'), 'kyc queue');
+  // دیدن تصویر مدرک داخل پنل (لینک یک بار آدرس سرور داشته باشد، نه دو بار)
+  await ev(`docShow('${wid}',0,'card')`);
+  await until(() => $('mBody').querySelector('img'), 'document image modal');
+  const src = $('mBody').querySelector('img').getAttribute('src');
+  if ((src.match(/https?:\/\//g) || []).length !== 1 || !/\/api\/files\//.test(src)) throw new Error('لینک تصویر مدرک خراب است: ' + src);
+  const img = await fetch(src);
+  if (!img.ok) throw new Error('تصویر مدرک باز نشد: ' + img.status);
+  log('تصویر مدرک داخل پنل باز شد (لینک امضاشدهٔ درست)');
+  ev('closeModal()');
   ev(`docSet('${wid}',0,'ok')`);
   await until(async () => (await call('GET', '/me', null, w.token)).user.kycStatus === 'verified', 'kyc approved');
   await until(() => ev(`uById('${wid}').kyc`) === 'ok', 'panel refreshed');

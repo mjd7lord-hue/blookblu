@@ -41,6 +41,8 @@ import { recomputeTrust } from '../trust/strikes';
 import { adminLog } from './admin.service';
 import { ARB_FIELDS, type ArbField } from '../arbitration/fees';
 import { arbiterBalances, moreSections } from './panel-more';
+import { adFunnel, onlineStats, recentEvents } from './panel-live';
+import { visitStats } from '../../lib/presence';
 
 const r = Router();
 r.use(requireAdmin);
@@ -289,14 +291,14 @@ async function statsSection(a: AdminCtx) {
     return rows.map((r) => r.n);
   };
   const scope = a.provinces.length ? inArray(profiles.province, a.provinces) : undefined;
-  const [signups, adsDaily, dealsDaily, byRole, byProv, byType, [online], [convToday], [pend], [escrow]] = await Promise.all([
+  const [funnel, visits, online, events] = await Promise.all([adFunnel(), visitStats(), onlineStats(), recentEvents(a)]);
+  const [signups, adsDaily, dealsDaily, byRole, byProv, byType, [convToday], [pend], [escrow]] = await Promise.all([
     series('users'),
     series('ads'),
     series('contracts'),
     db.select({ role: profiles.role, n: sql<number>`count(*)::int` }).from(profiles).where(scope).groupBy(profiles.role),
     db.select({ province: profiles.province, n: sql<number>`count(*)::int` }).from(profiles).where(scope).groupBy(profiles.province),
     db.select({ type: ads.type, status: ads.status, n: sql<number>`count(*)::int` }).from(ads).groupBy(ads.type, ads.status),
-    db.select({ n: sql<number>`count(*)::int` }).from(users).where(gte(users.lastSeenAt, new Date(Date.now() - 10 * 60_000))),
     db.select({ n: sql<number>`count(*)::int` }).from(conversations).where(gte(conversations.lastMessageAt, new Date(Date.now() - 86400_000))),
     db
       .select({
@@ -322,7 +324,11 @@ async function statsSection(a: AdminCtx) {
     byRole,
     byProvince: byProv,
     adsByType: byType,
-    onlineNow: online.n,
+    onlineNow: online.now,
+    online,
+    visits,
+    funnel,
+    events,
     conversationsToday: convToday.n,
     pending: pend,
     escrowHeld: Number(escrow.sum),

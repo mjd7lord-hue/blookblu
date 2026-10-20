@@ -1278,3 +1278,18 @@ export const strikes = pgTable(
   },
   (t) => [index('strikes_profile_idx').on(t.profileId, t.status), index('strikes_project_idx').on(t.projectId), index('strikes_status_idx').on(t.status)],
 );
+
+/* ================= دور ۳۹: بازدید سایت/اپ (آمار پنل) ================= */
+// هر بازدیدکننده (شناسهٔ تصادفی مرورگر) در هر روز تهران یک ردیف؛ views = تعداد باز کردن صفحه
+export const siteVisits = pgTable(
+  'site_visits',
+  {
+    day: date('day').notNull(),
+    visitor: varchar('visitor', { length: 40 }).notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    views: integer('views').notNull().default(1),
+    firstAt: ts('first_at').notNull().defaultNow(),
+    lastAt: ts('last_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.visitor] }), index('site_visits_day_idx').on(t.day)],
+);
