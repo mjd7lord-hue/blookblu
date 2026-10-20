@@ -1,3 +1,4 @@
+import { strikeCount } from '../trust/strikes';
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
 import {
@@ -19,7 +20,7 @@ import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { normalizeFa, toLatinDigits } from '../../lib/text';
 import { cfg, flag } from '../../lib/appConfig';
 import { bumpView } from '../../lib/views';
-import { privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
+import { lockedKeys, privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
 import { validateRoleData, type RoleData } from '../roles/validate';
 import { publicFileUrl, purgeFiles } from '../files/files.service';
 import { listPortfolio, profileFileIds, purgeUserFiles } from '../files/media.service';
@@ -29,17 +30,20 @@ type Profile = typeof profiles.$inferSelect;
 
 /* ---------- امتیاز اعتبار (همان فرمول اپ) ---------- */
 // رضایت (۵۵) + پروژهٔ انجام‌شده (۲۵) + تعداد نظر (۱۰) + احراز هویت (۱۰) = ۱۰۰
-export function trustOf(p: Pick<Profile, 'ratingAvg' | 'ratingCount' | 'doneCount'>, kycVerified: boolean) {
+export function trustOf(p: Pick<Profile, 'ratingAvg' | 'ratingCount' | 'doneCount'> & { trustAdj?: number | null }, kycVerified: boolean) {
   const satisfaction = Math.round((p.ratingAvg / 5) * 55);
   const projects = Math.min(25, p.doneCount);
   const reviewsPart = Math.min(10, Math.round(p.ratingCount / 2));
   const identity = kycVerified ? 10 : 0;
+  // دور ۳۶: +۵ قیم معتبر، −۱۰ هر اخطار بدقولی، −۵ اخطار کسی که قیمش هستی (profiles.trust_adj)
+  const adj = p.trustAdj ?? 0;
   return {
     satisfaction,
     projects,
     reviews: reviewsPart,
     identity,
-    total: satisfaction + projects + reviewsPart + identity,
+    adj,
+    total: Math.max(0, Math.min(100, satisfaction + projects + reviewsPart + identity + adj)),
   };
 }
 
@@ -193,10 +197,14 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData,
 export async function updateRoleProfile(user: User, role: Role, input: RoleData, extra: { title?: string; bio?: string }) {
   const p = await getOwnProfile(user.id, role);
 
-  // نام و شهر بعد از احراز هویت فقط از طریق پشتیبانی عوض می‌شود
-  if (user.kycStatus === 'verified') {
-    for (const k of ['fn', 'ln', 'cname', 'nid']) {
-      if (k in input && input[k] !== p.data[k]) throw forbidden('بعد از احراز هویت، نام فقط با پشتیبانی عوض می‌شود', 'KYC_LOCKED');
+  // اطلاعات اصلی (نام، تابعیت، سال تولد، شمارهٔ نظام، مشخصات ثبتی شرکت) بعد از ثبت‌نام فقط با پشتیبانی عوض می‌شود؛
+  // فیلد اصلی‌ای که خالی مانده بود را می‌شود یک بار پر کرد
+  const locked = lockedKeys(role);
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
+  for (const k of Object.keys(input)) {
+    const old = p.data[k];
+    if (locked.has(k) && old !== undefined && old !== null && old !== '' && !same(input[k], old)) {
+      throw forbidden('اطلاعات اصلی بعد از ثبت‌نام عوض نمی‌شود؛ برای اصلاح به پشتیبانی پیام بده', 'FIELD_LOCKED');
     }
   }
 
@@ -396,6 +404,8 @@ export async function publicProfile(code: string, viewer?: User) {
     reviewsCount: p.ratingCount,
     doneCount: p.doneCount,
     trust: trustOf(p, kycVerified),
+    // اخطار بدقولی فعال (۶ ماه اخیر) — شفاف روی شناسنامهٔ کاری
+    strikes: await strikeCount(p.id),
     // ۵ ستاره تا ۱ ستاره
     stars: [5, 4, 3, 2, 1].map((s) => stars.find((x) => x.rating === s)?.n ?? 0),
     week: p.week,
@@ -460,6 +470,7 @@ export async function searchProfiles(
       rating: profiles.ratingAvg,
       reviewsCount: profiles.ratingCount,
       doneCount: profiles.doneCount,
+      trustAdj: profiles.trustAdj,
       week: profiles.week,
       avatarFileId: profiles.avatarFileId,
       kyc: users.kycStatus,
@@ -476,9 +487,9 @@ export async function searchProfiles(
     .limit(q.limit)
     .offset((q.page - 1) * q.limit);
 
-  return rows.map(({ kyc, avatarFileId, ...r }) => ({
+  return rows.map(({ kyc, avatarFileId, trustAdj, ...r }) => ({
     ...r,
     avatarUrl: publicFileUrl(avatarFileId),
-    trust: trustOf({ ratingAvg: r.rating, ratingCount: r.reviewsCount, doneCount: r.doneCount }, kyc === 'verified').total,
+    trust: trustOf({ ratingAvg: r.rating, ratingCount: r.reviewsCount, doneCount: r.doneCount, trustAdj }, kyc === 'verified').total,
   }));
 }

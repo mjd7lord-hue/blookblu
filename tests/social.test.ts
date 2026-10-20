@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { api, auth, login, registered , multiRole } from './helpers';
+import { api, auth, login, makeGuarantor, registered, multiRole } from './helpers';
 import { beforeAll, afterAll } from 'vitest';
 
 describe('saved, guarantees, blocks, reports, meta', () => {
@@ -22,6 +22,13 @@ describe('saved, guarantees, blocks, reports, meta', () => {
     const g = await registered('engineer');
     const self = await api().post('/api/guarantees').set(auth(w.token)).send({ name: 'خودم', phone: w.phone });
     expect(self.body.error.code).toBe('SELF_GUARANTEE');
+    // قیم باید عضو بلوک و خوش‌سابقه باشد
+    expect((await api().post('/api/guarantees').set(auth(w.token)).send({ name: 'غریبه', phone: '09350000001' })).body.error.code).toBe('GUARANTOR_NOT_MEMBER');
+    const weak = await api().post('/api/guarantees').set(auth(w.token)).send({ name: 'مهندس کریمی', phone: g.phone });
+    expect(weak.body.error.code).toBe('GUARANTOR_NOT_ELIGIBLE');
+    expect(weak.body.error.details.reasons.length).toBeGreaterThan(2);
+    await makeGuarantor(g.phone);
+    const before = (await api().get(`/api/profiles/${w.profile.code}`)).body.profile.trust.total;
 
     const req = await api()
       .post('/api/guarantees')
@@ -32,8 +39,16 @@ describe('saved, guarantees, blocks, reports, meta', () => {
 
     const inc = await api().get('/api/guarantees').set(auth(g.token));
     expect(inc.body.incoming).toHaveLength(1);
-    const ans = await api().patch(`/api/guarantees/${inc.body.incoming[0].id}`).set(auth(g.token)).send({ status: 'accepted' });
+    expect(inc.body.eligibility.ok).toBe(true);
+    const gid = inc.body.incoming[0].id;
+    // قبول فقط با کد پیامکی
+    expect((await api().patch(`/api/guarantees/${gid}`).set(auth(g.token)).send({ status: 'accepted' })).body.error.code).toBe('CODE_REQUIRED');
+    const code = await api().post(`/api/guarantees/${gid}/code`).set(auth(g.token));
+    const ans = await api().patch(`/api/guarantees/${gid}`).set(auth(g.token)).send({ status: 'accepted', code: code.body.devCode });
     expect(ans.body.guarantee.status).toBe('accepted');
+    const after = (await api().get(`/api/profiles/${w.profile.code}`)).body.profile.trust;
+    expect(after.adj).toBe(5);
+    expect(after.total).toBe(before + 5);
     // غریبه نمی‌تواند جواب دهد
     const other = await login();
     expect((await api().patch(`/api/guarantees/${inc.body.incoming[0].id}`).set(auth(other.token)).send({ status: 'rejected' })).status).toBe(404);

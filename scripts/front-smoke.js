@@ -38,6 +38,7 @@ const html = fs
   .replace('<script src="urgent.js"></script>', inline('urgent.js'))
   .replace('<script src="explore.js"></script>', inline('explore.js'))
   .replace('<script src="i18n-extra.js"></script>', inline('i18n-extra.js'))
+  .replace('<script src="trust36.js"></script>', inline('trust36.js'))
   .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
@@ -234,6 +235,52 @@ async function register(w, role, data) {
   ev(B, 'advProj(0)');
   await until(() => ev(B, 'S.projs[S.role][0].stage') === 2, 'work started');
   log('شروع کار ← مرحله:', ev(B, 'PSTG[S.projs[S.role][0].stage]'));
+
+  /* ---- دور ۳۶: خوش‌قولی، قراردادهای من، آموزش، قفل اطلاعات اصلی، قیم ---- */
+  ev(B, 'openProjPage(0)');
+  await until(() => B.document.querySelector('#s-pdet .pj36') && B.document.querySelector('#s-pdet .bar .hq'), 'reliability section on project page');
+  // درخواست لغو با توافق ← طرف مقابل بنر را می‌بیند و «ادامهٔ قرارداد» می‌زند
+  ev(A, 'openProjPage(0)');
+  await until(() => A.document.querySelector('#s-pdet .pj36'), 'A project page');
+  ev(A, 'pjCancel()');
+  ev(A, "document.getElementById('pjC').value='نقشه عوض شد'");
+  ev(A, 'pjCancelGo(false)');
+  await until(() => ev(A, 'S.projs[S.role][0]._x.cancelReq && S.projs[S.role][0]._x.cancelReq.mine'), 'cancel requested');
+  await ev(B, 'LIVE.loadProjects(true)');
+  ev(B, 'openProjPage(0)');
+  await until(() => B.document.querySelector('#s-pdet .cq-ban .y'), 'cancel banner for the other side');
+  ev(B, 'pjCancelAns(false)');
+  await until(() => ev(B, 'S.projs[S.role][0]._x.cancelReq === null && S.projs[S.role][0].status === "active"'), 'cancel declined');
+  log('لغو با توافق: درخواست پیمانکار ← کارگر بنر را دید و «ادامهٔ قرارداد» زد');
+  // بدقولی: کارفرما ثبت می‌کند، کارگر اعتراض می‌کند
+  ev(A, 'openProjPage(0)');
+  await until(() => A.document.querySelector('#s-pdet .pj36'), 'A project page 2');
+  ev(A, 'pjReport()');
+  ev(A, "document.getElementById('pjN').value='دیروز سر کار نیامد'");
+  ev(A, 'pjReportGo()');
+  await until(async () => (await ev(A, "LIVE.api('GET','/strikes')")).byMe.length === 1, 'strike reported');
+  ev(B, "S.stk.at=0;go('strikes')");
+  await until(() => B.document.querySelector('#s-strikes .stk .acts'), 'strike to answer');
+  const sid = (await ev(B, "LIVE.api('GET','/strikes')")).against[0].id;
+  ev(B, `stkAnswer('${sid}',false,'ماشین خراب شد و خبر دادم')`);
+  await until(async () => (await ev(B, "LIVE.api('GET','/strikes')")).against[0].status === 'disputed', 'strike disputed');
+  log('بدقولی: پیمانکار ثبت کرد ← کارگر در «خوش‌قولی و اخطارها» اعتراض زد');
+  // قراردادهای من
+  ev(B, "S.ctrs.items=null;go('ctrs')");
+  await until(() => B.document.querySelectorAll('#s-ctrs .ctr-card').length === 1, 'contracts archive');
+  log('قراردادهای من:', B.document.querySelector('#s-ctrs .ctr-card .no').textContent, '·', B.document.querySelector('#s-ctrs .ctr-card .tag').textContent);
+  // منوی «من»، آموزش، قفل اطلاعات اصلی، قیم
+  ev(B, "go('me')");
+  await until(() => B.document.querySelectorAll('#s-me .m36').length === 3, 'me tiles');
+  ev(B, "tutOpen('home')");
+  if (!B.document.querySelector('#sb .tut-ph .scr')) throw new Error('آموزش متحرک باز نشد');
+  ev(B, 'tutGo(1);closeSheet()');
+  ev(B, 'openEditAll()');
+  await until(() => B.document.querySelectorAll('#s-edit .lkf').length >= 2, 'locked main info');
+  if (B.document.querySelector('#s-edit #rf_fn')) throw new Error('نام نباید در ویرایش قابل تغییر باشد');
+  ev(B, "go('guar')");
+  await until(() => B.document.querySelector('#s-guar .elig36 .elig i.n'), 'guarantor eligibility');
+  log('منوی «من» (قراردادها، خوش‌قولی، راهنما)، آموزش «؟»، قفل نام، شرط قیم: درست');
 
   // صورت‌وضعیت: مجری ردیف اضافه و ارسال می‌کند، کارفرما تأیید
   ev(B, 'openSov(0)');

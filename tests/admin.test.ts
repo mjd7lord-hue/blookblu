@@ -77,7 +77,7 @@ describe('KYC and admin panel', () => {
     expect((await api().get(k.cardUrl)).status).toBe(404);
     // نام بعد از تأیید قفل است
     const rename = await api().patch('/api/me/roles/worker').set(auth(w.token)).send({ data: { fn: 'علی' } });
-    expect(rename.body.error.code).toBe('KYC_LOCKED');
+    expect(rename.body.error.code).toBe('FIELD_LOCKED');
     expect((await sendKyc(w.token)).body.error.code).toBe('KYC_DONE');
 
     const notifs = await api().get('/api/notifications').set(auth(w.token));

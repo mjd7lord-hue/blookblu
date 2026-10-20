@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { ads, contracts, conversations, dailyReports, profiles, projectPayments, projects, reviews, STAGES } from '../../db/schema';
+import { ads, contracts, conversations, dailyReports, profiles, projectPayments, projects, reviews, STAGES, strikes } from '../../db/schema';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
@@ -12,6 +12,7 @@ import { clientP, load, party, providerP, type Party, type Project } from './acc
 import { notify } from '../notifications/notify';
 import { publicFileUrl } from '../files/files.service';
 import { voidPendingContract } from '../contracts/contract.service';
+import { KIND_FA, openStrike } from '../trust/strikes';
 
 const faDigits = (n: number) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+d]);
 
@@ -62,12 +63,17 @@ function shape(row: { p: Project; client: Party; provider: Party }, userId: stri
     paid: sum.paid,
     paidPending: sum.pending,
     lastReport: sum.lastReport,
+    // درخواست لغو با توافق (بعد از امضا)
+    cancelReq: row.p.cancelReqBy
+      ? { mine: row.p.cancelReqBy === (iAmClient ? row.client.id : row.provider.id), reason: row.p.cancelReqReason, at: row.p.cancelReqAt }
+      : null,
     // دکمه‌های مجاز برای کاربر فعلی
     can: {
       start: row.p.status === 'active' && row.p.stage === 1,
       finish: row.p.status === 'active' && row.p.stage === 2 && iAmClient,
       progress: row.p.status === 'active' && !iAmClient,
       cancel: row.p.status === 'active' && row.p.stage < 3,
+      report: row.p.status === 'active',
       review: row.p.status === 'done' && !reviewed,
     },
   };
@@ -203,22 +209,149 @@ r.post(
   }),
 );
 
+/** لغو واقعی پروژه (مشترک بین لغو آزاد، لغو با توافق و لغو یک‌طرفه) */
+async function doCancel(row: Awaited<ReturnType<typeof load>>, actorUserId: string, reason: string, sysText: string) {
+  const [p] = await db
+    .update(projects)
+    .set({ status: 'cancelled', cancelledAt: new Date(), cancelReason: reason, cancelReqBy: null, cancelReqAt: null, cancelReqReason: null, updatedAt: new Date() })
+    .where(and(eq(projects.id, row.p.id), eq(projects.status, 'active')))
+    .returning();
+  if (!p) throw conflict('وضعیت پروژه عوض شده', 'BAD_STAGE');
+  await voidPendingContract(p.id);
+  await afterChange(row, p, actorUserId, sysText, 'پروژه لغو شد');
+  return p;
+}
+
+async function contractSigned(projectId: string) {
+  const [c] = await db.select({ status: contracts.status }).from(contracts).where(eq(contracts.projectId, projectId)).limit(1);
+  return c?.status === 'active';
+}
+
+/** آیا طرف مقابل در این پروژه بدقولی ثبت‌شده دارد؟ (لغو بعد از بدقولی او اخطار ندارد) */
+async function otherAtFault(projectId: string, otherProfileId: string) {
+  const [s] = await db
+    .select({ id: strikes.id })
+    .from(strikes)
+    .where(and(eq(strikes.projectId, projectId), eq(strikes.profileId, otherProfileId), inArray(strikes.status, ['pending', 'disputed', 'confirmed'])))
+    .limit(1);
+  return !!s;
+}
+
+/**
+ * لغو:
+ * - قرارداد هنوز امضای دوطرفه ندارد ← لغو آزاد (مثل قبل)
+ * - قرارداد امضا شده ← «درخواست لغو» برای طرف مقابل؛ قبول کند = لغو با توافق بدون اخطار
+ *   force=true ← لغو یک‌طرفه = اخطار بدقولی فوری برای لغوکننده (مگر طرف مقابل در همین پروژه بدقولی ثبت‌شده داشته باشد)
+ */
 r.post(
   '/:id/cancel',
   ah(async (req, res) => {
     const { id } = parse(uuidParam, req.params);
-    const { reason } = parse(z.object({ reason: z.string().trim().min(3, 'دلیل لغو را بنویس').max(500) }), req.body);
+    const { reason, force } = parse(
+      z.object({ reason: z.string().trim().min(3, 'دلیل لغو را بنویس').max(500), force: z.boolean().optional() }),
+      req.body,
+    );
     const row = await load(req.user!.id, id);
     if (row.p.status !== 'active') throw conflict('این پروژه فعال نیست', 'BAD_STAGE');
+    const iAmClient = row.client.userId === req.user!.id;
+    const me = iAmClient ? row.client : row.provider;
+    const other = iAmClient ? row.provider : row.client;
+
+    if (!(await contractSigned(id))) {
+      const p = await doCancel(row, req.user!.id, reason, `پروژه لغو شد. دلیل: ${reason}`);
+      return res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
+    }
+    // طرف مقابل قبلاً درخواست لغو داده ← این یعنی موافقت
+    if (row.p.cancelReqBy === other.id) {
+      const why = row.p.cancelReqReason ?? reason;
+      const p = await doCancel(row, req.user!.id, why, `پروژه با توافق هر دو طرف لغو شد (بدون اخطار). دلیل: ${why}`);
+      return res.json({ project: shape({ ...row, p }, req.user!.id, undefined), mutual: true });
+    }
+    const atFault = await otherAtFault(id, other.id);
+    if (force || atFault) {
+      const p = await doCancel(
+        row,
+        req.user!.id,
+        reason,
+        atFault
+          ? `پروژه بعد از بدقولی ${other.name} لغو شد. دلیل: ${reason}`
+          : `${me.name} قرارداد امضاشده را یک‌طرفه لغو کرد؛ اخطار بدقولی برایش ثبت شد. دلیل: ${reason}`,
+      );
+      if (!atFault) await openStrike({ profileId: me.id, userId: me.userId, byProfileId: null, projectId: id, kind: 'cancel', note: reason, immediate: true });
+      return res.json({ project: shape({ ...row, p }, req.user!.id, undefined), strike: !atFault });
+    }
     const [p] = await db
       .update(projects)
-      .set({ status: 'cancelled', cancelledAt: new Date(), cancelReason: reason, updatedAt: new Date() })
+      .set({ cancelReqBy: me.id, cancelReqAt: new Date(), cancelReqReason: reason, updatedAt: new Date() })
       .where(and(eq(projects.id, id), eq(projects.status, 'active')))
       .returning();
     if (!p) throw conflict('وضعیت پروژه عوض شده', 'BAD_STAGE');
-    await voidPendingContract(id);
-    await afterChange(row, p, req.user!.id, `پروژه لغو شد. دلیل: ${reason}`, 'پروژه لغو شد');
+    await afterChange(
+      row,
+      p,
+      req.user!.id,
+      `${me.name} درخواست لغو قرارداد داد. دلیل: ${reason}. اگر طرف مقابل قبول کند، بدون اخطار لغو می‌شود.`,
+      'درخواست لغو قرارداد',
+    );
+    res.status(202).json({ project: shape({ ...row, p }, req.user!.id, undefined), requested: true });
+  }),
+);
+
+/** جواب به درخواست لغو: قبول = لغو با توافق؛ رد = قرارداد ادامه دارد. درخواست‌دهنده با accept=false پس می‌گیرد */
+r.post(
+  '/:id/cancel/answer',
+  ah(async (req, res) => {
+    const { id } = parse(uuidParam, req.params);
+    const { accept } = parse(z.object({ accept: z.boolean() }), req.body);
+    const row = await load(req.user!.id, id);
+    if (row.p.status !== 'active' || !row.p.cancelReqBy) throw conflict('درخواست لغوی در کار نیست', 'NO_CANCEL_REQUEST');
+    const me = row.client.userId === req.user!.id ? row.client : row.provider;
+    const mine = row.p.cancelReqBy === me.id;
+    if (accept && !mine) {
+      const why = row.p.cancelReqReason ?? 'توافق دوطرف';
+      const p = await doCancel(row, req.user!.id, why, `پروژه با توافق هر دو طرف لغو شد (بدون اخطار). دلیل: ${why}`);
+      return res.json({ project: shape({ ...row, p }, req.user!.id, undefined), mutual: true });
+    }
+    const [p] = await db
+      .update(projects)
+      .set({ cancelReqBy: null, cancelReqAt: null, cancelReqReason: null, updatedAt: new Date() })
+      .where(eq(projects.id, id))
+      .returning();
+    await afterChange(
+      row,
+      p,
+      req.user!.id,
+      mine ? `${me.name} درخواست لغو را پس گرفت.` : `${me.name} با لغو موافقت نکرد؛ قرارداد ادامه دارد.`,
+      mine ? 'درخواست لغو پس گرفته شد' : 'با لغو موافقت نشد',
+    );
     res.json({ project: shape({ ...row, p }, req.user!.id, undefined) });
+  }),
+);
+
+/** ثبت بدقولی طرف مقابل: سر کار نیامد / به قرارداد عمل نکرد ← او ۲۴ ساعت فرصت قبول یا اعتراض دارد */
+r.post(
+  '/:id/report',
+  ah(async (req, res) => {
+    const { id } = parse(uuidParam, req.params);
+    const body = parse(z.object({ kind: z.enum(['no_show', 'breach']), note: z.string().trim().min(5, 'بنویس چه شد').max(600) }), req.body);
+    const row = await load(req.user!.id, id);
+    if (row.p.status !== 'active') throw conflict('بدقولی فقط در پروژهٔ فعال ثبت می‌شود', 'BAD_STAGE');
+    if (!(await contractSigned(id))) throw conflict('بدقولی فقط بعد از امضای قرارداد توسط هر دو طرف ثبت می‌شود', 'NOT_SIGNED');
+    const iAmClient = row.client.userId === req.user!.id;
+    const me = iAmClient ? row.client : row.provider;
+    const other = iAmClient ? row.provider : row.client;
+    const s = await openStrike({ profileId: other.id, userId: other.userId, byProfileId: me.id, projectId: id, kind: body.kind, note: body.note });
+    if (row.p.conversationId) {
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, row.p.conversationId)).limit(1);
+      if (conv) {
+        await postMessage(conv, null, {
+          kind: 'sys',
+          body: `${me.name} برای ${other.name} «${KIND_FA[body.kind]}» ثبت کرد: ${body.note}. ${other.name} تا ۲۴ ساعت می‌تواند قبول یا اعتراض کند.`,
+          projectId: id,
+        });
+      }
+    }
+    res.status(201).json({ strike: s });
   }),
 );
 

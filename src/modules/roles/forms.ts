@@ -20,6 +20,8 @@ export type Field = {
   show?: (d: Record<string, unknown>) => boolean;
   /** هرگز در پروفایل عمومی نمایش داده نمی‌شود */
   private?: boolean;
+  /** اطلاعات اصلی: بعد از ثبت‌نام فقط با پشتیبانی عوض می‌شود (دور ۳۶) */
+  locked?: boolean;
   pattern?: RegExp;
   patternMsg?: string;
 };
@@ -44,24 +46,24 @@ export const RANGE_OPTS: Record<string, 'city' | 'km50' | 'province' | 'country'
 
 const foreign = (d: Record<string, unknown>) => d.nat === 'اتباع خارجی';
 const NAT: Field[] = [
-  { k: 'nat', t: 'chips', label: 'تابعیت', opts: ['ایرانی', 'اتباع خارجی'], req: true },
-  { k: 'natc', t: 'chips', label: 'کشور', opts: ['افغانستان', 'عراق', 'پاکستان', 'ترکیه'], req: true, custom: true, show: foreign },
+  { k: 'nat', t: 'chips', label: 'تابعیت', opts: ['ایرانی', 'اتباع خارجی'], req: true, locked: true },
+  { k: 'natc', t: 'chips', label: 'کشور', opts: ['افغانستان', 'عراق', 'پاکستان', 'ترکیه'], req: true, custom: true, show: foreign, locked: true },
   {
-    k: 'idType', t: 'chips', label: 'مدرک اقامت معتبر', req: true, custom: true, show: foreign, private: true,
+    k: 'idType', t: 'chips', label: 'مدرک اقامت معتبر', req: true, custom: true, show: foreign, private: true, locked: true,
     opts: ['کارت آمایش', 'کارت هویت اتباع (کد فراگیر)', 'گذرنامه با روادید کار', 'برگهٔ سرشماری'],
   },
-  { k: 'idNo', t: 'text', label: 'شمارهٔ مدرک یا کد فراگیر', req: true, show: foreign, private: true },
+  { k: 'idNo', t: 'text', label: 'شمارهٔ مدرک یا کد فراگیر', req: true, show: foreign, private: true, locked: true },
   { k: 'wp', t: 'chips', label: 'پروانهٔ کار اتباع', opts: ['دارم', 'در حال اقدام', 'ندارم'], show: foreign },
 ];
 
 const BASE: Step = {
   title: 'اطلاعات پایه',
   f: [
-    { k: 'fn', t: 'text', label: 'نام', req: true },
-    { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true },
+    { k: 'fn', t: 'text', label: 'نام', req: true, locked: true },
+    { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true, locked: true },
     ...NAT,
     // اختیاری؛ سن روی شناسنامهٔ کاری
-    { k: 'by', t: 'text', label: 'سال تولد', pattern: /^1[34]\d\d$/, patternMsg: 'سال تولد را شمسی و ۴ رقمی بنویس، مثلاً ۱۳۶۵' },
+    { k: 'by', t: 'text', label: 'سال تولد', pattern: /^1[34]\d\d$/, patternMsg: 'سال تولد را شمسی و ۴ رقمی بنویس، مثلاً ۱۳۶۵', locked: true },
     { k: 'prov', t: 'prov', label: 'استان محل کار', req: true },
     { k: 'city', t: 'city', label: 'شهر', req: true },
     { k: 'range', t: 'chips', label: 'تا کجا برای کار می‌روی؟', opts: Object.keys(RANGE_OPTS), req: true },
@@ -151,7 +153,7 @@ export const REG: Record<Role, Step[]> = {
       f: [
         { k: 'field', t: 'multi', max: 3, label: 'رشته (تا ۳ رشته)', req: true, custom: true, opts: ['عمران', 'معماری', 'تأسیسات مکانیکی', 'تأسیسات برقی', 'نقشه‌برداری', 'شهرسازی', 'ترافیک'] },
         { k: 'grade', t: 'chips', label: 'پایهٔ پروانه', req: true, opts: ['پایه ۳', 'پایه ۲', 'پایه ۱', 'ارشد', 'هنوز پروانه ندارم'] },
-        { k: 'nezam', t: 'text', label: 'شمارهٔ عضویت نظام مهندسی', show: noLicense },
+        { k: 'nezam', t: 'text', label: 'شمارهٔ عضویت نظام مهندسی', show: noLicense, locked: true },
         { k: 'nprov', t: 'prov', label: 'استان سازمان نظام مهندسی', show: noLicense },
       ],
     },
@@ -212,10 +214,10 @@ export const REG: Record<Role, Step[]> = {
     {
       title: 'مشخصات شرکت',
       f: [
-        { k: 'cname', t: 'text', label: 'نام شرکت', req: true },
-        { k: 'ctype', t: 'chips', label: 'نوع شرکت', req: true, custom: true, opts: ['سهامی خاص', 'مسئولیت محدود', 'تعاونی'] },
-        { k: 'nid', t: 'text', label: 'شناسهٔ ملی شرکت', req: true, pattern: /^\d{11}$/, patternMsg: 'شناسهٔ ملی شرکت ۱۱ رقم است' },
-        { k: 'reg', t: 'text', label: 'شمارهٔ ثبت' },
+        { k: 'cname', t: 'text', label: 'نام شرکت', req: true, locked: true },
+        { k: 'ctype', t: 'chips', label: 'نوع شرکت', req: true, custom: true, opts: ['سهامی خاص', 'مسئولیت محدود', 'تعاونی'], locked: true },
+        { k: 'nid', t: 'text', label: 'شناسهٔ ملی شرکت', req: true, pattern: /^\d{11}$/, patternMsg: 'شناسهٔ ملی شرکت ۱۱ رقم است', locked: true },
+        { k: 'reg', t: 'text', label: 'شمارهٔ ثبت', locked: true },
         { k: 'prov', t: 'prov', label: 'استان دفتر', req: true },
         { k: 'city', t: 'city', label: 'شهر', req: true },
       ],
@@ -224,7 +226,7 @@ export const REG: Record<Role, Step[]> = {
       title: 'رتبه و صلاحیت',
       f: [
         { k: 'rank', t: 'chips', label: 'رتبهٔ پیمانکاری ساختمان و ابنیه', req: true, opts: ['رتبه ۱', 'رتبه ۲', 'رتبه ۳', 'رتبه ۴', 'رتبه ۵', 'ندارد'] },
-        { k: 'nezam', t: 'multi', label: 'صلاحیت نظام مهندسی', custom: true, opts: ['مجری ذی‌صلاح حقوقی', 'انبوه‌سازی', 'طراحی حقوقی', 'نظارت حقوقی'] },
+        { k: 'nezam', t: 'multi', label: 'صلاحیت نظام مهندسی', custom: true, opts: ['مجری ذی‌صلاح حقوقی', 'انبوه‌سازی', 'طراحی حقوقی', 'نظارت حقوقی']},
         { k: 'areas', t: 'multi', label: 'حوزه‌های کار', req: true, custom: true, opts: ['مسکونی', 'تجاری', 'صنعتی و سوله', 'ابنیهٔ دولتی', 'بازسازی'] },
       ],
     },
@@ -249,8 +251,8 @@ export const REG: Record<Role, Step[]> = {
     {
       title: 'اطلاعات پایه',
       f: [
-        { k: 'fn', t: 'text', label: 'نام', req: true },
-        { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true },
+        { k: 'fn', t: 'text', label: 'نام', req: true, locked: true },
+        { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true, locked: true },
         ...NAT,
         { k: 'prov', t: 'prov', label: 'استان ملک', req: true },
         { k: 'city', t: 'city', label: 'شهر', req: true },
@@ -285,6 +287,7 @@ export const ROLE_INFO: Record<Role, { name: string; desc: string }> = {
 
 export const allFields = (role: Role) => REG[role].flatMap((s) => s.f);
 
+export const lockedKeys = (role: Role) => new Set(allFields(role).filter((f) => f.locked).map((f) => f.k));
 export const privateKeys = (role: Role) => new Set(allFields(role).filter((f) => f.private).map((f) => f.k));
 
 /** گزینه‌های «+ مورد دیگر» که مدیر در پنل پذیرفته (فهرست‌ها ← مورد دیگر) */

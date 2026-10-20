@@ -143,6 +143,10 @@ export const profiles = pgTable(
     referredBy: uuid('referred_by'),
     // عکس پروفایل (برای شرکت: لوگو) — فاز ۳
     avatarFileId: uuid('avatar_file_id').references((): AnyPgColumn => files.id, { onDelete: 'set null' }),
+    // اصلاح امتیاز اعتبار (دور ۳۶): +۵ قیم معتبر، −۱۰ هر اخطار بدقولی فعال، −۵ هر اخطار کسی که قیمش هستم
+    trustAdj: smallint('trust_adj').notNull().default(0),
+    // تا این زمان «آماده به کار» و نیروی فوری بسته است (۲ اخطار در ۹۰ روز)
+    restrictedUntil: ts('restricted_until'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -460,6 +464,10 @@ export const projects = pgTable(
     finishedAt: ts('finished_at'),
     cancelledAt: ts('cancelled_at'),
     cancelReason: text('cancel_reason'),
+    // درخواست لغو با توافق (بعد از امضای قرارداد): طرف مقابل قبول کند = بدون اخطار
+    cancelReqBy: uuid('cancel_req_by'),
+    cancelReqAt: ts('cancel_req_at'),
+    cancelReqReason: text('cancel_req_reason'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -1240,4 +1248,33 @@ export const roleRequests = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('role_requests_user_idx').on(t.userId, t.status), index('role_requests_status_idx').on(t.status)],
+);
+
+/* ================= دور ۳۶: اخطار بدقولی (سر کار نیامد، لغو یک‌طرفه بعد از امضا) ================= */
+
+export const strikeKindEnum = pgEnum('strike_kind', ['no_show', 'cancel', 'breach']);
+// pending = منتظر جواب متهم (۲۴ ساعت) · disputed = اعتراض، منتظر مدیر · confirmed = ثبت شد · dismissed = رد شد
+export const strikeStatusEnum = pgEnum('strike_status', ['pending', 'disputed', 'confirmed', 'dismissed']);
+
+export const strikes = pgTable(
+  'strikes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    byProfileId: uuid('by_profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    kind: strikeKindEnum('kind').notNull(),
+    status: strikeStatusEnum('status').notNull().default('pending'),
+    note: text('note'),
+    reply: text('reply'),
+    respondBy: ts('respond_by'),
+    decidedAt: ts('decided_at'),
+    decidedBy: uuid('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    // اخطار تأییدشده ۶ ماه بعد از امتیاز برمی‌گردد
+    expiresAt: ts('expires_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('strikes_profile_idx').on(t.profileId, t.status), index('strikes_project_idx').on(t.projectId), index('strikes_status_idx').on(t.status)],
 );

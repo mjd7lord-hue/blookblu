@@ -37,6 +37,7 @@ import { perm, requireAdmin, type AdminCtx } from '../../middlewares/auth';
 import { fileUrl, publicFileUrl } from '../files/files.service';
 import { notify } from '../notifications/notify';
 import { trustOf } from '../profiles/profiles.service';
+import { recomputeTrust } from '../trust/strikes';
 import { adminLog } from './admin.service';
 import { ARB_FIELDS, type ArbField } from '../arbitration/fees';
 import { arbiterBalances, moreSections } from './panel-more';
@@ -484,6 +485,7 @@ r.patch(
     const [g] = await db.update(guarantees).set({ status, respondedAt: new Date() }).where(eq(guarantees.id, id)).returning();
     if (!g) throw notFound('پیدا نشد');
     await adminLog(db, req.user!, 'guarantee.' + status, 'guarantee', id);
+    await recomputeTrust([g.profileId]);
     res.json({ guarantee: g });
   }),
 );
@@ -496,6 +498,7 @@ r.delete(
     const [g] = await db.delete(guarantees).where(eq(guarantees.id, id)).returning();
     if (!g) throw notFound('پیدا نشد');
     await adminLog(db, req.user!, 'guarantee.delete', 'guarantee', id, `${g.guarantorName} · ${g.relation}`);
+    await recomputeTrust([g.profileId]);
     res.json({ ok: true });
   }),
 );

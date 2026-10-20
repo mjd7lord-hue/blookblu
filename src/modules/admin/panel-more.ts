@@ -43,7 +43,7 @@ import { emitTo } from '../../lib/events';
 import { metrics } from '../../lib/metrics';
 import { env } from '../../config/env';
 import { perm, requireAdmin, type AdminCtx } from '../../middlewares/auth';
-import { registerRoleRoutes, roleRequestsSection, urgentSection } from './panel-roles';
+import { registerRoleRoutes, roleRequestsSection, strikesSection, urgentSection } from './panel-roles';
 import { fileUrl } from '../files/files.service';
 import { notify } from '../notifications/notify';
 import { postMessage } from '../chat/chat.service';
@@ -634,4 +634,5 @@ export function moreSections(a: AdminCtx, add: (key: string, m: AdminModule | nu
   add('sessions', 'admins', () => sessionsSection());
   add('roleRequests', 'users', () => roleRequestsSection());
   add('urgent', 'ads', () => urgentSection(a));
+  add('strikes', 'reports', () => strikesSection(a));
 }

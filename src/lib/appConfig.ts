@@ -133,7 +133,7 @@ export const DEFAULTS = {
   boost: null as unknown,
   // محدودیت آگهی رایگان (FREE_AD_LIMIT در اپ): تعداد آگهی کار/نیروی فعال هر کاربر
   // نیروی فوری: اعتبار درخواست (ساعت)، حداکثر گیرنده در هر درخواست، حداکثر درخواست باز هر کارفرما
-  limits: { freeAds: 1, urgentHours: 3, urgentMaxSend: 30, urgentOpen: 3 },
+  limits: { freeAds: 1, urgentHours: 3, urgentMaxSend: 30, urgentOpen: 3, guarMinDone: 3, guarMinTrust: 70, guarMinDays: 30, guarMax: 5 },
 };
 
 export type ConfigKey = keyof typeof DEFAULTS;
@@ -188,6 +188,11 @@ const SCHEMAS: Partial<Record<ConfigKey, z.ZodTypeAny>> = {
     urgentHours: z.number().int().min(1).max(48).default(3),
     urgentMaxSend: z.number().int().min(1).max(200).default(30),
     urgentOpen: z.number().int().min(1).max(20).default(3),
+    // شرط قیم شدن (دور ۳۶)
+    guarMinDone: z.number().int().min(0).max(100).default(3),
+    guarMinTrust: z.number().int().min(0).max(100).default(70),
+    guarMinDays: z.number().int().min(0).max(365).default(30),
+    guarMax: z.number().int().min(1).max(50).default(5),
   }),
   visitTypes: z.array(z.object({ n: z.string().min(2).max(80), d: z.string().max(30), p: z.number().int().min(0) })).min(1).max(20),
   whatsNew: z.object({

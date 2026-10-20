@@ -4,6 +4,7 @@
  * ← اولین‌ها که قبول کنند برنده‌اند: گفت‌وگو + توافق با همان شرایط + پروژه خودکار ساخته می‌شود و آگهی آمادگی‌شان خاموش می‌شود.
  * وقتی تعداد لازم پر شد بقیه «دیر رسیدی» می‌گیرند. درخواست بعد از limits.urgentHours ساعت منقضی می‌شود.
  */
+import { assertNotRestricted } from '../trust/strikes';
 import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, ilike, inArray, lt, ne, notInArray, or, sql } from 'drizzle-orm';
@@ -75,6 +76,8 @@ async function matches(me: { id: string; userId: string }, q: { roles: readonly 
     inArray(profiles.role, q.roles as Role[]),
     eq(users.status, 'active'),
     ne(profiles.userId, me.userId),
+    // اخطار بدقولی: ۷ روز بدون نیروی فوری
+    sql`(${profiles.restrictedUntil} is null or ${profiles.restrictedUntil} < now())`,
   ];
   if (blocked.length) conds.push(notInArray(profiles.userId, blocked));
   if (q.skill) {
@@ -258,6 +261,8 @@ r.post(
         .where(and(eq(urgentOffers.requestId, id), inArray(urgentOffers.profileId, mine)))
         .limit(1);
       if (!of) throw notFound('این درخواست برای تو نیست');
+      const [pf] = await tx.select({ restrictedUntil: profiles.restrictedUntil }).from(profiles).where(eq(profiles.id, of.profileId)).limit(1);
+      if (pf) assertNotRestricted(pf);
       if (of.status === 'missed') throw conflict('دیر رسیدی؛ نفر دیگری زودتر قبول کرد یا درخواست بسته شد', 'URGENT_CLOSED');
       if (of.status !== 'sent') throw conflict('قبلاً جواب داده‌ای', 'ALREADY_ANSWERED');
       if (rq.status !== 'open') throw conflict('دیر رسیدی؛ نفر دیگری زودتر قبول کرد یا درخواست بسته شد', 'URGENT_CLOSED');

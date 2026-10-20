@@ -90,3 +90,27 @@ export async function multiRole(on: boolean) {
   const s = cfg('settings');
   await saveConfig('settings', { ...s, flags: { ...s.flags, multiRole: on } }, u.id);
 }
+
+/** امضای قرارداد پروژه توسط هر دو طرف (کد پیامکی) */
+export async function signBoth(pid: string, ...people: { token: string }[]) {
+  for (const u of people) {
+    const code = await api().post(`/api/projects/${pid}/contract/sign-code`).set(auth(u.token));
+    if (code.status !== 200) throw new Error('sign-code failed ' + JSON.stringify(code.body));
+    const s = await api().post(`/api/projects/${pid}/contract/sign`).set(auth(u.token)).send({ code: code.body.devCode, contentHash: code.body.contentHash });
+    if (s.status !== 200) throw new Error('sign failed ' + JSON.stringify(s.body));
+  }
+}
+
+/** کاربری که شرط قیم شدن را دارد: هویت تأییدشده، ۴۰ روز سابقه، ۳ پروژه، امتیاز بالا */
+export async function makeGuarantor(phone: string) {
+  const { db } = await import('../src/db');
+  const { users, profiles } = await import('../src/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [u] = await db
+    .update(users)
+    .set({ kycStatus: 'verified', createdAt: new Date(Date.now() - 40 * 86400_000) })
+    .where(eq(users.phone, phone))
+    .returning();
+  await db.update(profiles).set({ doneCount: 5, ratingAvg: 4.8, ratingCount: 12 }).where(eq(profiles.userId, u.id));
+  return u;
+}

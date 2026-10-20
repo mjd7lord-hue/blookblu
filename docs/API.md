@@ -106,10 +106,14 @@
 
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
-| GET | `/guarantees` 👤 | — | `mine`: قیم‌های من · `incoming`: کسانی که از من ضمانت خواسته‌اند |
-| POST | `/guarantees` 👤 | `{ name, relation, phone }` | درخواست قیم شدن (حداکثر ۵) |
-| PATCH | `/guarantees/:id` 🔒 | `{ status: accepted\|rejected }` | فقط صاحب همان شماره |
+| GET | `/guarantees` 👤 | — | `mine`: قیم‌های من · `incoming`: کسانی که از من ضمانت خواسته‌اند · `eligibility` `{ ok, reasons[], stats }` من می‌توانم قیم باشم؟ · `rules` |
+| POST | `/guarantees` 👤 | `{ name, relation, phone }` | قیم باید عضو بلوک و واجد شرط باشد (`GUARANTOR_NOT_MEMBER` / `GUARANTOR_NOT_ELIGIBLE` با `details.reasons`) |
+| POST | `/guarantees/:id/code` 🔒 | — | کد پیامکی تأیید ضمانت به موبایل قیم (`devCode` در توسعه) |
+| PATCH | `/guarantees/:id` 🔒 | `{ status: accepted\|rejected, code? }` | فقط صاحب همان شماره؛ قبول = شرط‌ها + کد پیامکی (`CODE_REQUIRED`) ← +۵ اعتبار |
+| POST | `/guarantees/:id/revoke` 🔒 | — | قیم ضمانت فعالش را پس می‌گیرد |
 | DELETE | `/guarantees/:id` 👤 | — | |
+
+**قیم معتبر (دور ۳۶):** هویت تأییدشده، حداقل `limits.guarMinDone` (۳) پروژهٔ تمام‌شده در همهٔ نقش‌ها، اعتبار `guarMinTrust` (۷۰)+، `guarMinDays` (۳۰) روز سابقه، بدون اخطار فعال، حداکثر `guarMax` (۵) ضمانت. اثر: `profiles.trust_adj` = +۵ قیم معتبر − ۱۰ × اخطار فعال − ۵ × اخطار فعال کسانی که قیمشان هستی؛ `trust.total` بین ۰ و ۱۰۰ و `trust.adj` در پاسخ.
 
 امتیاز و نظر از فاز ۲ فقط روی **پروژهٔ تمام‌شده** ثبت می‌شود: `POST /projects/:id/review` (پایین‌تر).
 
@@ -584,3 +588,19 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/admin/panel/urgent/:id/cancel` 🛡 ads:2 | `{ reason? }` | لغو درخواست نیروی فوری |
 
 `/admin/panel/snapshot` حالا `roleRequests` (دسترسی کاربران) و `urgent` (دسترسی آگهی‌ها) هم دارد. `GET /me` → `user.roleUnlock`.
+
+
+## خوش‌قولی و اخطار بدقولی (دور ۳۶) 🔒
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| POST | `/projects/:id/report` | `{ kind: no_show\|breach, note }` | فقط بعد از امضای دوطرفهٔ قرارداد (`NOT_SIGNED`)؛ برای طرف مقابل اخطار `pending` با مهلت ۲۴ ساعت · تکراری: `STRIKE_EXISTS` |
+| POST | `/projects/:id/cancel` | `{ reason, force? }` | بدون قرارداد فعال: لغو آزاد. قرارداد فعال: پاسخ ۲۰۲ `requested` (درخواست لغو برای طرف مقابل)؛ اگر طرف مقابل قبلاً درخواست داده = لغو با توافق (`mutual`)؛ `force` = لغو یک‌طرفه + اخطار فوری برای لغوکننده (`strike: true`)، مگر طرف مقابل در همین پروژه بدقولی ثبت‌شده داشته باشد |
+| POST | `/projects/:id/cancel/answer` | `{ accept }` | طرف مقابل: قبول = لغو بدون اخطار؛ رد/پس گرفتن = پاک شدن درخواست. پروژه: `cancelReq { mine, reason, at }` و `can.report` |
+| GET | `/strikes` | — | `against` (اخطارهای من، همهٔ نقش‌ها) · `byMe` · `rules` |
+| POST | `/strikes/:id/respond` | `{ accept, reply? }` | فقط متهم و فقط `pending`؛ قبول = `confirmed`، اعتراض (`reply` لازم) = `disputed` برای مدیر |
+| GET | `/me/contracts` | — | بایگانی همهٔ قراردادهای من: `number, status, title, amount, myRole, myProfileRole, other, signed{client,provider}, project{id,status,stage}, printUrl` |
+
+قانون: اخطار تأییدشده ۶ ماه (`expiresAt`) −۱۰ اعتبار؛ بی‌جواب بعد از ۲۴ ساعت خودکار تأیید (جاروی ۱۵ دقیقه‌ای `sweepStrikes`)؛ ۲ اخطار در ۹۰ روز ← `profiles.restricted_until` (۷ روز): آگهی «آماده به کار» بسته و ساخت/روشن کردنش و نیروی فوری `RESTRICTED`؛ ۳ اخطار فعال ← `users.status = suspended`. پروفایل عمومی: `strikes` (تعداد فعال). قرارداد تازه: مادهٔ «خوش‌قولی و لغو».
+اطلاعات اصلی بعد از ثبت‌نام (`locked` در forms.ts: نام، تابعیت و مدرک اقامت، سال تولد، شمارهٔ نظام، مشخصات ثبتی شرکت) فقط با پشتیبانی عوض می‌شود: `FIELD_LOCKED` (فیلد خالی را می‌شود یک بار پر کرد).
+
+ادمین: snapshot بخش `strikes` (دسترسی reports) · `POST /admin/panel/strikes/:id/decide` `{ confirm, note? }` (reports:2). `limits` در app_config: `guarMinDone, guarMinTrust, guarMinDays, guarMax`.

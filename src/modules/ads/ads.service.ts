@@ -1,3 +1,4 @@
+import { assertNotRestricted } from '../trust/strikes';
 import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
 import { adResponses, ads, answerVotes, conversationMembers, conversations, profiles, users, type Role } from '../../db/schema';
@@ -57,6 +58,7 @@ function clean(input: Partial<AdInput>) {
 
 export async function createAd(profile: Profile, input: AdInput) {
   checkAudience(input.type, input.audience);
+  if (input.type === 'work') assertNotRestricted(profile);
   // هر پروفایل حداکثر ۲۰ آگهی فعال
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -100,6 +102,7 @@ async function ownAd(profile: Profile, id: string) {
 export async function updateAd(profile: Profile, id: string, input: Partial<AdInput> & { status?: 'active' | 'paused' | 'closed' }) {
   const ad = await ownAd(profile, id);
   if (input.audience) checkAudience(ad.type, input.audience);
+  if (ad.type === 'work' && input.status === 'active' && ad.status !== 'active') assertNotRestricted(profile);
   const c = clean({ ...input, type: ad.type });
   delete c.type;
   const set: Record<string, unknown> = { ...c, updatedAt: new Date() };
@@ -123,6 +126,7 @@ export const authorCols = {
   rating: profiles.ratingAvg,
   reviewsCount: profiles.ratingCount,
   doneCount: profiles.doneCount,
+  trustAdj: profiles.trustAdj,
   week: profiles.week,
   avatarFileId: profiles.avatarFileId,
 };
@@ -136,16 +140,17 @@ export function shapeAuthor(a: {
   rating: number;
   reviewsCount: number;
   doneCount: number;
+  trustAdj?: number;
   week: unknown;
   avatarFileId: string | null;
   kyc: string;
 }) {
-  const { kyc, avatarFileId, ...rest } = a;
+  const { kyc, avatarFileId, trustAdj, ...rest } = a;
   return {
     ...rest,
     avatarUrl: publicFileUrl(avatarFileId),
     rating: Math.round(a.rating * 10) / 10,
-    trust: trustOf({ ratingAvg: a.rating, ratingCount: a.reviewsCount, doneCount: a.doneCount }, kyc === 'verified').total,
+    trust: trustOf({ ratingAvg: a.rating, ratingCount: a.reviewsCount, doneCount: a.doneCount, trustAdj }, kyc === 'verified').total,
   };
 }
 

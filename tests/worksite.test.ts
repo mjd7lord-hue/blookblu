@@ -15,7 +15,7 @@ describe('phase 5: contract, payments, statements, daily reports', () => {
     expect(c0.number).toMatch(/^BLK-14\d\d-\d{6}$/);
     expect(c0.status).toBe('draft');
     expect(c0.mySide).toBe('client');
-    expect(c0.terms.clauses).toHaveLength(7);
+    expect(c0.terms.clauses).toHaveLength(8);
     expect(c0.terms.milestones).toEqual([
       { title: 'پیش‌پرداخت', pct: 30 },
       { title: 'پایان کار', pct: 70 },
@@ -56,7 +56,7 @@ describe('phase 5: contract, payments, statements, daily reports', () => {
     expect(ed.body.contract.version).toBe(2);
     expect(ed.body.contract.status).toBe('draft');
     expect(ed.body.contract.signatures.client).toBeNull();
-    expect(ed.body.contract.terms.clauses).toHaveLength(8);
+    expect(ed.body.contract.terms.clauses).toHaveLength(9);
     expect(ed.body.contract.terms.clauses[4].text).toContain('۵٪');
     const proj = await api().get(`/api/projects/${pid}`).set(auth(boss.token));
     expect(proj.body.project.retentionPct).toBe(5);

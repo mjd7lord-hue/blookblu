@@ -13,6 +13,7 @@ import profileRoutes from './modules/profiles/profiles.routes';
 import adRoutes, { responsesRouter } from './modules/ads/ads.routes';
 import savedRoutes from './modules/saved/saved.routes';
 import { guaranteesRouter } from './modules/trust/trust.routes';
+import { strikesRouter } from './modules/trust/strikes';
 import chatRoutes, { messagesRouter } from './modules/chat/chat.routes';
 import eventsRoutes from './modules/chat/events.routes';
 import projectRoutes from './modules/projects/projects.routes';
@@ -25,7 +26,7 @@ import kycRoutes from './modules/kyc/kyc.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import adminPanelRoutes from './modules/admin/panel';
 import { panelMoreRoutes } from './modules/admin/panel-more';
-import { contractPrintRouter, projectContractRouter } from './modules/contracts/contract.routes';
+import { contractPrintRouter, myContractsRouter, projectContractRouter } from './modules/contracts/contract.routes';
 import { paymentsRouter, projectPaymentsRouter } from './modules/projects/payments';
 import { projectStatementsRouter, statementsRouter } from './modules/projects/statements';
 import { dailyRouter, projectDailyRouter, projectFilesRouter } from './modules/projects/worksite';
@@ -82,6 +83,7 @@ export function createApp() {
   app.use('/api/me', mediaRoutes);
   app.use('/api/me', kycRoutes);
   app.use('/api/me/team', teamRoutes);
+  app.use('/api/me/contracts', myContractsRouter);
   app.use('/api/me/stats', statsRoutes);
   app.use('/api/files', fileRoutes);
   app.use('/api/admin', adminRoutes);
@@ -115,6 +117,7 @@ export function createApp() {
   app.use('/api/urgent', urgentRoutes);
   app.use('/api/events', eventsRoutes);
   app.use('/api/guarantees', guaranteesRouter);
+  app.use('/api/strikes', strikesRouter);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api', safetyRoutes);
 

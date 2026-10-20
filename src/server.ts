@@ -3,6 +3,7 @@ import { createApp } from './app';
 import { pool } from './db';
 import { logger } from './lib/logger';
 import { startMonitor } from './lib/monitor';
+import { startStrikeSweeper } from './modules/trust/strikes';
 import { recomputeVerified } from './modules/admin/admin.service';
 import { finalizeExpired } from './modules/arbitration/arbitration.service';
 
@@ -22,6 +23,7 @@ setInterval(sweep, 3600_000).unref();
 
 // بیدار نگه داشتن روی Render و هشدار پیامکی قطعی دیتابیس (lib/monitor.ts)
 startMonitor();
+startStrikeSweeper();
 
 function shutdown() {
   server.close(() => pool.end().finally(() => process.exit(0)));

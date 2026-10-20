@@ -8,7 +8,9 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../db';
-import { profiles, roleRequests, ROLES, urgentOffers, urgentRequests, users } from '../../db/schema';
+import { profiles, projects, roleRequests, ROLES, strikes, urgentOffers, urgentRequests, users } from '../../db/schema';
+import { alias } from 'drizzle-orm/pg-core';
+import { confirmStrike, recomputeTrust } from '../trust/strikes';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { badRequest, conflict, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
@@ -27,6 +29,21 @@ export async function roleRequestsSection() {
     .orderBy(sql`case ${roleRequests.status} when 'pending' then 0 when 'approved' then 1 else 2 end`, desc(roleRequests.createdAt))
     .limit(500);
   return rows.map(({ r, ...u }) => ({ ...r, user: { ...u, name: [u.firstName, u.lastName].filter(Boolean).join(' ') } }));
+}
+
+/** بخش snapshot: اخطارهای بدقولی (اعتراض‌ها اول) — دور ۳۶ */
+export async function strikesSection(a: AdminCtx) {
+  const by = alias(profiles, 'by_p');
+  const rows = await db
+    .select({ s: strikes, code: profiles.code, name: profiles.displayName, role: profiles.role, userId: profiles.userId, province: profiles.province, byName: by.displayName, byCode: by.code, project: projects.title })
+    .from(strikes)
+    .innerJoin(profiles, eq(profiles.id, strikes.profileId))
+    .leftJoin(by, eq(by.id, strikes.byProfileId))
+    .leftJoin(projects, eq(projects.id, strikes.projectId))
+    .where(a.provinces.length ? inArray(profiles.province, a.provinces) : undefined)
+    .orderBy(sql`case ${strikes.status} when 'disputed' then 0 when 'pending' then 1 else 2 end`, desc(strikes.createdAt))
+    .limit(500);
+  return rows.map(({ s, ...x }) => ({ ...s, ...x }));
 }
 
 /** بخش snapshot: نیروی فوری با شمارش پیشنهادها */
@@ -65,6 +82,36 @@ async function unlockRole(adminUser: { id: string }, userId: string, toRole: str
 }
 
 export function registerRoleRoutes(r: Router) {
+  /** تصمیم مدیر دربارهٔ اخطار بدقولی: تأیید (اثر کامل) یا رد (پاک از امتیاز) */
+  r.post(
+    '/strikes/:id/decide',
+    perm('reports', 2),
+    ah(async (req, res) => {
+      const { id } = parse(uuidParam, req.params);
+      const b = parse(z.object({ confirm: z.boolean(), note: z.string().trim().max(500).optional() }), req.body);
+      const [s0] = await db.select().from(strikes).where(eq(strikes.id, id)).limit(1);
+      if (!s0) throw notFound('پیدا نشد');
+      const [who] = await db.select({ userId: profiles.userId }).from(profiles).where(eq(profiles.id, s0.profileId)).limit(1);
+      let s;
+      if (b.confirm) {
+        if (s0.status === 'confirmed') throw conflict('این اخطار از قبل ثبت شده', 'ALREADY_DECIDED');
+        s = await confirmStrike(id, req.user!.id);
+      } else {
+        if (s0.status === 'dismissed') throw conflict('این اخطار از قبل رد شده', 'ALREADY_DECIDED');
+        [s] = await db.update(strikes).set({ status: 'dismissed', decidedAt: new Date(), decidedBy: req.user!.id }).where(eq(strikes.id, id)).returning();
+        // اخطار ثبت‌شده‌ای که مدیر لغو کرد: امتیاز خودش و قیم‌هایش برمی‌گردد
+        await recomputeTrust();
+        if (who) await notify(who.userId, { type: 'id', title: 'اخطار بدقولی شما لغو شد', body: b.note || 'مدیر بلوک بررسی کرد و اخطار را رد کرد.', link: { screen: 'strikes' } });
+      }
+      if (s0.byProfileId) {
+        const [by] = await db.select({ userId: profiles.userId }).from(profiles).where(eq(profiles.id, s0.byProfileId)).limit(1);
+        if (by) await notify(by.userId, { type: 'id', title: b.confirm ? 'بدقولی ثبت‌شده تأیید شد' : 'بدقولی ثبت‌شده رد شد', body: b.note, link: { screen: 'strikes' } });
+      }
+      await adminLog(db, req.user!, b.confirm ? 'strike.confirm' : 'strike.dismiss', 'strike', id, b.note);
+      res.json({ strike: s });
+    }),
+  );
+
   r.post(
     '/role-requests/:id/approve',
     perm('users', 2),

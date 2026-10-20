@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '../src/db';
 import { users } from '../src/db/schema';
-import { multiRole, api, auth, login, registered, FORMS } from './helpers';
+import { multiRole, api, auth, login, makeGuarantor, registered, FORMS } from './helpers';
 import { beforeAll, afterAll } from 'vitest';
 
 async function owner() {
@@ -93,8 +93,10 @@ describe('admin panel: roles, permissions, province scope, snapshot', () => {
     expect(JSON.stringify((await api().get('/api/notifications').set(auth(c.token))).body)).toContain('متوقف شد');
 
     const w = await registered('worker');
+    await makeGuarantor(c.phone);
     const g = await api().post('/api/guarantees').set(auth(w.token)).send({ phone: c.phone, name: 'پیمانکار صالحی', relation: 'کارفرمای قبلی' });
-    const gid = g.body.guarantee?.id ?? (await api().get('/api/admin/panel/snapshot').set(auth(o.token))).body.guarantees[0].id;
+    expect(g.status).toBe(201);
+    const gid = g.body.guarantee.id;
     await api().patch(`/api/admin/panel/guarantees/${gid}`).set(auth(o.token)).send({ status: 'rejected' }).expect(200);
     await api().delete(`/api/admin/panel/guarantees/${gid}`).set(auth(o.token)).expect(200);
   });

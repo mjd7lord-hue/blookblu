@@ -243,6 +243,12 @@ async function user(phone, role, data) {
   ev("document.getElementById('lim_urgentHours').value='3';limSave()");
   await until(async () => (await call('GET', '/app/config')).limits.urgentHours === 3, 'limits restored');
   log('نیروی فوری و آماده به کار در پنل؛ محدودیت‌ها ذخیره شد (اعتبار درخواست فوری ۵ ← ۳ ساعت)');
+  if (!$('lim_guarMinTrust') || $('lim_guarMinTrust').value !== '70') throw new Error('شرط قیم در محدودیت‌ها نیست');
+
+  // اخطار بدقولی (دور ۳۶)
+  ev("S.f.stk='all';go('strikes')");
+  await until(() => $('page').textContent.includes('اعتراض، منتظر تصمیم'), 'strikes page');
+  log('صفحهٔ «اخطار بدقولی» و شرط قیم در تنظیمات');
 
   ev("go('status')");
   await until(() => $('page').textContent.includes('پایش شبانه‌روزی'), 'status page');
