@@ -604,3 +604,12 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 اطلاعات اصلی بعد از ثبت‌نام (`locked` در forms.ts: نام، تابعیت و مدرک اقامت، سال تولد، شمارهٔ نظام، مشخصات ثبتی شرکت) فقط با پشتیبانی عوض می‌شود: `FIELD_LOCKED` (فیلد خالی را می‌شود یک بار پر کرد).
 
 ادمین: snapshot بخش `strikes` (دسترسی reports) · `POST /admin/panel/strikes/:id/decide` `{ confirm, note? }` (reports:2). `limits` در app_config: `guarMinDone, guarMinTrust, guarMinDays, guarMax`.
+
+
+## حساب: دستگاه‌ها و دعوت (دور ۳۷) 🔒
+| متد | مسیر | بدنه | توضیح |
+|---|---|---|---|
+| POST | `/me/sessions` | `{ refreshToken? }` | نشست‌های باز: `id, ua, at, current` (با refreshToken همین دستگاه، `current` مشخص می‌شود) |
+| DELETE | `/me/sessions/:id` | — | خروج از یک دستگاه |
+| POST | `/me/sessions/revoke-others` | `{ refreshToken }` | خروج از همهٔ دستگاه‌ها جز همین |
+| GET | `/me/referrals` | — | کسانی که با کد معرفی یکی از نقش‌های من (`data.ref`) ثبت‌نام کرده‌اند |

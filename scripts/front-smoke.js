@@ -39,6 +39,7 @@ const html = fs
   .replace('<script src="explore.js"></script>', inline('explore.js'))
   .replace('<script src="i18n-extra.js"></script>', inline('i18n-extra.js'))
   .replace('<script src="trust36.js"></script>', inline('trust36.js'))
+  .replace('<script src="real.js"></script>', inline('real.js'))
   .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];

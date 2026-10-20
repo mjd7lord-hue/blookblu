@@ -9,6 +9,7 @@ import { logger } from './lib/logger';
 import { errorHandler, notFoundHandler } from './middlewares/error';
 import authRoutes from './modules/auth/auth.routes';
 import meRoutes from './modules/profiles/me.routes';
+import accountRoutes from './modules/profiles/account.routes';
 import profileRoutes from './modules/profiles/profiles.routes';
 import adRoutes, { responsesRouter } from './modules/ads/ads.routes';
 import savedRoutes from './modules/saved/saved.routes';
@@ -80,6 +81,7 @@ export function createApp() {
   app.use('/api/app', appContentRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/me', meRoutes);
+  app.use('/api/me', accountRoutes);
   app.use('/api/me', mediaRoutes);
   app.use('/api/me', kycRoutes);
   app.use('/api/me/team', teamRoutes);

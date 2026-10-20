@@ -24,7 +24,9 @@
     "start:server": "node dist/server.js",
     "test:account": "tsx scripts/test-account.ts",
     "test:projects": "tsx scripts/test-projects.ts",
-    "front:reload": "tsx scripts/reload-probe.js"
+    "front:reload": "tsx scripts/reload-probe.js",
+    "front:real": "tsx scripts/real-check.js",
+    "admin:real": "tsx scripts/admin-real.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
