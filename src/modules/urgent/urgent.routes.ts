@@ -76,6 +76,8 @@ async function matches(me: { id: string; userId: string }, q: { roles: readonly 
     inArray(profiles.role, q.roles as Role[]),
     eq(users.status, 'active'),
     ne(profiles.userId, me.userId),
+    // حساب‌های نمونه نیروی فوری نمی‌گیرند
+    sql`${users.phone} not like '0900000%'`,
     // اخطار بدقولی: ۷ روز بدون نیروی فوری
     sql`(${profiles.restrictedUntil} is null or ${profiles.restrictedUntil} < now())`,
   ];

@@ -1,4 +1,5 @@
 import { strikeCount } from '../trust/strikes';
+import { realUsersOnly } from '../../lib/samples';
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
 import {
@@ -440,6 +441,8 @@ export async function searchProfiles(
   viewer?: User,
 ) {
   const conds: SQL[] = [eq(profiles.isPublic, true), eq(users.status, 'active')];
+  const ro = realUsersOnly();
+  if (ro) conds.push(ro);
   if (q.role) conds.push(eq(profiles.role, q.role));
   if (q.province) conds.push(eq(profiles.province, q.province));
   if (q.city) conds.push(eq(profiles.city, q.city));

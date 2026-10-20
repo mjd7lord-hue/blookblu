@@ -137,6 +137,20 @@ const ROLES = {
   console.log('متن‌های نمایشی برای جست‌وجو:', demo.size);
 
   const found = new Map();
+  // مهمان (واردنشده): خانه و کاوش هم نباید دادهٔ نمایشی داشته باشد
+  {
+    const G = browser('guest');
+    await until(() => G.LIVE && G.LIVE.on, 'boot guest');
+    for (const sc of ['home', 'explore']) {
+      ev(G, `go('${sc}')`); await sleep(900);
+      const txt = (G.document.querySelector('#s-' + sc) || {}).textContent || '';
+      const realT = ev(G, "ADS.filter(a=>a._live).map(a=>a.title+' '+(a.desc||''))").join('\n');
+      for (const s of demo) if (txt.includes(s) && !realT.includes(s)) { const k = 'guest · ' + sc; if (!found.has(k)) found.set(k, new Set()); found.get(k).add(s.slice(0, 50)); }
+      if (process.env.DUMP && sc === 'home') { console.log('\n[guest] خانه:'); [...G.document.querySelectorAll('#s-home > *')].forEach((x) => console.log('   ', (x.id ? '#' + x.id + ' ' : '') + String(x.className).slice(0, 24), '|', x.textContent.replace(/\s+/g, ' ').trim().slice(0, 110))); }
+    }
+    G.close();
+    console.log('✓ guest');
+  }
   for (const [role, data] of Object.entries(ROLES)) {
     const W = browser(role);
     await until(() => W.LIVE && W.LIVE.on, 'boot ' + role);

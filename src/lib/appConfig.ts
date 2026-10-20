@@ -25,6 +25,7 @@ export const DEFAULTS = {
       otpVoice: false,
       maintenance: false,
       multiRole: false, // خاموش = نقش فقط یک بار هنگام ثبت‌نام؛ تغییر با پشتیبانی
+      showSamples: false, // دور ۴۲: حساب‌های نمونهٔ 0900000xxxx در کاوش دیده شوند؟ (فقط برای نمایش اپ)
     },
     ver: { min: '1.0.0', latest: '1.0.0', force: false },
     display: { font: 'متوسط', latin: false, contrast: false, reduce: false },

@@ -1,4 +1,5 @@
 import { assertNotRestricted, recomputeTrust } from '../trust/strikes';
+import { realUsersOnly } from '../../lib/samples';
 import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
 import { adResponses, ads, answerVotes, conversationMembers, conversations, profiles, users, type Role } from '../../db/schema';
@@ -177,6 +178,8 @@ export async function explore(q: ExploreQuery, viewer?: User) {
     eq(users.status, 'active'),
     or(sql`${ads.expiresAt} is null`, sql`${ads.expiresAt} > now()`)!,
   ];
+  const ro = realUsersOnly();
+  if (ro) conds.push(ro);
   if (q.authorRole) conds.push(eq(profiles.role, q.authorRole));
   if (q.forRole) conds.push(sql`${q.forRole}::role = any(${ads.audience})`);
   if (q.province) conds.push(eq(ads.province, q.province));
@@ -247,7 +250,7 @@ export async function publicAnswers(adId: string, viewer?: User) {
     .from(adResponses)
     .innerJoin(profiles, eq(profiles.id, adResponses.profileId))
     .innerJoin(users, eq(users.id, profiles.userId))
-    .where(and(eq(adResponses.adId, adId), ne(adResponses.status, 'withdrawn'), eq(users.status, 'active')))
+    .where(and(eq(adResponses.adId, adId), ne(adResponses.status, 'withdrawn'), eq(users.status, 'active'), realUsersOnly()))
     .orderBy(adResponses.createdAt)
     .limit(200);
   const ids = rows.map((x) => x.r.id);

@@ -626,3 +626,5 @@ snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, 
 ادمین (دور ۴۰): `POST /admin/panel/users/:id/verify-identity` `{ note? }` (kyc:2) — تأیید دستی هویت کاربری که به‌جای «تأیید هویت» فقط «کارت ملی» (مدرک گروه «هویت») فرستاده؛ بدون مدرک: `NO_ID_DOCUMENT`. snapshot کاربران `profile.avatarUrl` دارد (پنل عکس را نشان می‌دهد).
 
 امتیاز اعتبار (دور ۴۱): `trust = { satisfaction(۵۵), projects(۲۵), reviews(۱۰), identity(۱۰), start(۱۰ ثبت‌نام), docs(۵ مدرک تأییدشده), adj, total }`؛ total بین ۰ و ۱۰۰. نویسندهٔ آگهی و نتیجهٔ جست‌وجو `identityVerified` هم دارند.
+
+حساب‌های نمونه (دور ۴۲): کاربران با شمارهٔ `0900000…` در `/ads` (کاوش)، `/ads/:id/answers`، جست‌وجوی پروفایل و نیروی فوری نمی‌آیند، مگر `settings.flags.showSamples = true`.
