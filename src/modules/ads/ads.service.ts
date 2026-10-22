@@ -130,6 +130,8 @@ export const authorCols = {
   trustAdj: profiles.trustAdj,
   week: profiles.week,
   avatarFileId: profiles.avatarFileId,
+  // حساب نمونه (0900000…): اپ برچسب «نمونه» نشان می‌دهد
+  sample: sql<boolean>`${users.phone} like '0900000%'`,
 };
 
 export function shapeAuthor(a: {

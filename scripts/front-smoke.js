@@ -586,6 +586,24 @@ async function register(w, role, data) {
   await until(async () => (await ev(B, "LIVE.api('GET','/me/role-requests')")).items[0].status === 'cancelled', 'role request cancelled');
   log('تغییر نقش از اپ: درخواست به پنل رفت، کارت «در حال بررسی» و لغو');
 
+  // حساب نمونه (0900000…): پنهان؛ با «نمایش حساب‌های نمونه» دیده می‌شود ولی با برچسب «نمونه»
+  {
+    const sp = '09000004' + String(Date.now()).slice(-3);
+    const s1 = await fetch(API + '/api/auth/otp/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: sp }) }).then((r) => r.json());
+    const v1 = await fetch(API + '/api/auth/otp/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: sp, code: s1.devCode }) }).then((r) => r.json());
+    const H = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + v1.accessToken };
+    await fetch(API + '/api/me/roles', { method: 'POST', headers: H, body: JSON.stringify({ role: 'worker', data: { fn: 'نمونه', ln: 'آزمون', nat: 'ایرانی', prov: 'یزد', city: 'یزد', range: 'کل استان', skills: ['کارگر ساده'], exp: '۳ تا ۵ سال', team: 'تنها', days: [0, 1], hours: 'تمام روز' } }) });
+    const ad = await fetch(API + '/api/ads', { method: 'POST', headers: H, body: JSON.stringify({ type: 'work', title: 'کارگر ساده آماده کار در یزد', province: 'یزد', city: 'یزد', audience: ['contractor'] }) }).then((r) => r.json());
+    const { cfg, saveConfig } = require('../src/lib/appConfig');
+    const st0 = cfg('settings');
+    await saveConfig('settings', { ...st0, flags: { ...st0.flags, showSamples: true } }, v1.user.id);
+    await ev(A, "LIVE.loadAds('work', true)");
+    ev(A, "S.provF=null;exploreMode('workers')");
+    await until(() => A.document.querySelector(`.acard[data-id="${ad.ad.id}"] .smp`), 'sample badge in explore').catch((e) => { throw new Error(e.message + ' · ' + JSON.stringify(ev(A, `[S.mode, S.cur, ADS.filter(a=>a.id==='${ad.ad.id}').map(a=>[a._sample,a.who,P[a.who]&&P[a.who].sample]), !!document.querySelector('.acard[data-id="${ad.ad.id}"]'), ADS.length]`)) + ' ad:' + JSON.stringify(ad).slice(0,200)); });
+    await saveConfig('settings', { ...st0, flags: { ...st0.flags, showSamples: false } }, v1.user.id);
+    log('حساب نمونه با «نمایش حساب‌های نمونه» در کاوش با برچسب «نمونه» دیده شد');
+  }
+
   ev(A, "go('set')");
   log('تنظیمات:', ev(A, "[...document.querySelectorAll('#s-set .hint')].pop().textContent"));
   ev(A, 'logout()');

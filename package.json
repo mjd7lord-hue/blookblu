@@ -26,7 +26,8 @@
     "test:projects": "tsx scripts/test-projects.ts",
     "front:reload": "tsx scripts/reload-probe.js",
     "front:real": "tsx scripts/real-check.js",
-    "admin:real": "tsx scripts/admin-real.js"
+    "admin:real": "tsx scripts/admin-real.js",
+    "province:ads": "tsx scripts/province-ads.ts"
   },
   "license": "UNLICENSED",
   "dependencies": {
