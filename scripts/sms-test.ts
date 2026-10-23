@@ -1,6 +1,7 @@
 /**
  * آزمایش پنل پیامک با تنظیمات .env: یک کد نمونه به شمارهٔ داده‌شده می‌فرستد.
- *   npm run sms:test -- 09121234567
+ *   npm run sms:test -- 09121234567          (الگوی ورود)
+ *   npm run sms:test -- 09121234567 --sign   (الگوی امضای قرارداد)
  */
 import { env } from '../src/config/env';
 import { sms } from '../src/lib/sms';
@@ -10,8 +11,9 @@ async function main() {
   const phone = normalizePhone(process.argv[2] ?? '');
   if (!phone) throw new Error('شمارهٔ موبایل را بده: npm run sms:test -- 09121234567');
   if (env.SMS_PROVIDER === 'console') console.log('⚠️ SMS_PROVIDER=console است؛ پیامک واقعی فرستاده نمی‌شود (فقط در لاگ)');
-  await sms.sendOtp(phone, '12345');
-  console.log(`✅ کد آزمایشی 12345 با ${env.SMS_PROVIDER} به ${phone} فرستاده شد`);
+  const purpose = process.argv.includes('--sign') ? 'sign' : 'login';
+  await sms.sendOtp(phone, '12345', purpose);
+  console.log(`✅ کد آزمایشی 12345 (${purpose === 'sign' ? 'الگوی امضای قرارداد' : 'الگوی ورود'}) با ${env.SMS_PROVIDER} به ${phone} فرستاده شد`);
 }
 
 main().catch((e) => {
