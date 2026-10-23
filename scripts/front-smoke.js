@@ -89,7 +89,9 @@ async function login(w, phone10) {
   ev(w, `startAuth();S.reg.phone='${phone10}';document.getElementById('agr').checked=true;chkPhone();sendOtp()`);
   await until(() => ev(w, 'S.reg.step') === 'otp' && ev(w, 'S.reg.devCode'), 'OTP sent');
   const code = ev(w, 'S.reg.devCode');
-  ev(w, `(()=>{const ins=[...document.querySelectorAll('#otp input')];'${code}'.split('').forEach((d,i)=>{ins[i].value=d;otpIn(ins[i],i)})})()`);
+  // مثل پر شدن خودکار آیفون: کل کد در خانهٔ اول (باید بین ۵ خانه پخش شود)
+  await until(() => ev(w, "document.querySelector('#otp input[autocomplete=one-time-code]')"), 'otp autofill field');
+  ev(w, `(()=>{const f=document.querySelector('#otp input');f.value='${code}';otpIn(f,0)})()`);
 }
 async function register(w, role, data) {
   await until(() => ev(w, 'S.reg.step') === 'role', 'role step');
