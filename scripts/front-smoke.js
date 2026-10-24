@@ -35,6 +35,7 @@ const html = fs
   .replace('<script src="live-projects.js"></script>', inline('live-projects.js'))
   .replace('<script src="live-more.js"></script>', inline('live-more.js'))
   .replace('<script src="work.js"></script>', inline('work.js'))
+  .replace('<script src="hero46.js"></script>', inline('hero46.js'))
   .replace('<script src="urgent.js"></script>', inline('urgent.js'))
   .replace('<script src="explore.js"></script>', inline('explore.js'))
   .replace('<script src="i18n-extra.js"></script>', inline('i18n-extra.js'))
@@ -217,6 +218,15 @@ async function register(w, role, data) {
     throw new Error(e.message + ' · ' + JSON.stringify(ev(A, "[S.cur,S.role,(S.projs[S.role]||[]).map(p=>[p.stage,p.status,(p._x&&p._x.progress||[]).length])]")) + ' · ' + [...A.document.querySelectorAll('#s-home > *')].map((x) => x.className + ':' + x.textContent.trim().slice(0, 30)).join(' | '));
   });
   log('پیشرفت کار: مجری تیک زد ← کارت اصلی خانهٔ کارفرما (با انیمیشن):', A.document.querySelector('#phHero .ph-who').textContent.trim(), '·', A.document.querySelector('#phHero .ph-kpi b').textContent);
+  // دور ۴۶: طرح مهارت روی کارت و ویرایش فهرست کار از برگهٔ «مدیریت پروژه»
+  if (!A.document.querySelector('#phHero .h46[data-k="mason"]')) throw new Error('طرح مهارت (بنایی) روی کارت خانه نیست');
+  ev(B, "go('home')");
+  await until(() => B.document.querySelector('#phHero .h46'), 'B hero');
+  ev(B, 'h46Manage(0)');
+  ev(B, "document.getElementById('m46In').value='نظافت پایان کار';m46Add()");
+  ev(B, 'm46Save()');
+  await until(async () => (await ev(B, "LIVE.api('GET','/projects/'+S.projs[S.role][0]._id)")).project.progress.length === 4, 'task added from manage sheet');
+  log('مدیریت پروژه از کارت خانه: کار تازه به فهرست اضافه و روی سرور ذخیره شد');
   // پرداخت: فقط کارفرما ثبت می‌کند؛ مجری دریافت را تأیید می‌کند
   if (B.document.querySelector('#s-pdet .sec-head button[onclick^="addPay"]')) throw new Error('مجری نباید دکمهٔ «ثبت پرداخت» ببیند');
   ev(A, 'openProjPage(0)');
@@ -343,7 +353,7 @@ async function register(w, role, data) {
   await until(async () => (await ev(A, "LIVE.api('GET','/responses?dir=in')")).items[0].status === 'accepted', 'response accepted');
   log('آگهی‌های من: توقف و فعال‌سازی، پذیرش پاسخ کارگر');
 
-  ev(B, "S.rtab='out';go('req')");
+  ev(B, "LIVE.loaded.req=0;S.rtab='out';go('req')");
   await until(() => ev(B, "S.out.length && S.out[0].st==='ok' && S.out[0].to.startsWith('B-')"), 'outgoing requests');
   log('مرکز درخواست‌های کارگر: درخواست ارسالی «پذیرفته شد» ·', ev(B, 'S.out[0].t'));
 

@@ -32,6 +32,7 @@ const html = fs
   .replace('<script src="live-projects.js"></script>', inline('live-projects.js'))
   .replace('<script src="live-more.js"></script>', inline('live-more.js'))
   .replace('<script src="work.js"></script>', inline('work.js'))
+  .replace('<script src="hero46.js"></script>', inline('hero46.js'))
   .replace('<script src="urgent.js"></script>', inline('urgent.js'))
   .replace('<script src="explore.js"></script>', inline('explore.js'))
   .replace('<script src="i18n-extra.js"></script>', inline('i18n-extra.js'))
