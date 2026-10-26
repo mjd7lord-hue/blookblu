@@ -618,8 +618,8 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 ## حضور و آمار زندهٔ پنل (دور ۳۹)
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
-| POST | `/app/ping` (ورود اختیاری) | `{ v, view? }` | v = شناسهٔ تصادفی مرورگر (۸ تا ۴۰ حرف)؛ view=true یعنی یک بازدید تازه. «آنلاین» = پینگ در ۲ دقیقهٔ اخیر |
-| GET | `/admin/panel/live` | dash:1 | `online { now, members, guests }`، `visits { today, month (۳۰ روز), total, daily[30] }`، `events` (رخدادهای واقعی ۷ روز اخیر) |
+| POST | `/app/ping` (ورود اختیاری) | `{ v, view?, src?, sa? }` | v = شناسهٔ تصادفی مرورگر (۸ تا ۴۰ حرف)؛ view=true یعنی یک بازدید تازه؛ src = utm_source یا سایت قبلی؛ sa = باز شده از آیکون روی گوشی. دستگاه/مرورگر از User-Agent؛ ربات‌ها ثبت نمی‌شوند. «آنلاین» = پینگ در ۲ دقیقهٔ اخیر |
+| GET | `/admin/panel/live?range=today\|7d\|30d\|all` | dash:1 | `online { now, members, guests }` (بدون مدیران و نمونه‌ها)، `visits { today, month (۳۰ روز), total, daily[30] }`، `people` (ثبت‌نام به روز تهران)، `analytics { range, from, to, cur, prev, sources, devices, os, browsers, chart }` (cur/prev: visitors, views, visits, avgSec, bounceRate, members, guests, installed, returning, newVisitors, signups, accounts, halfDone, phones, conversion؛ chart: ساعتی برای today، روزانه برای بقیه)، `events` (رخدادهای واقعی ۷ روز اخیر) |
 
 snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, signed }, events` دارد. پاسخ تخصصی با دست‌کم یک «مفید بود» = +۱ در `trust_adj` (تا ۵) و اعلان برای پاسخ‌دهنده.
 

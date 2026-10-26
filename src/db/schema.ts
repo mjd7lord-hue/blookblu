@@ -1290,6 +1290,12 @@ export const siteVisits = pgTable(
     views: integer('views').notNull().default(1),
     firstAt: ts('first_at').notNull().defaultNow(),
     lastAt: ts('last_at').notNull().defaultNow(),
+    // دور ۵۱: جزئیات بازدید (از اولین بازدید همان روز) — بدون IP و بدون دادهٔ شخصی
+    device: varchar('device', { length: 10 }), // mobile | tablet | desktop
+    os: varchar('os', { length: 12 }), // android | ios | windows | mac | linux | other
+    browser: varchar('browser', { length: 12 }), // chrome | safari | firefox | edge | samsung | opera | telegram | instagram | other
+    source: varchar('source', { length: 40 }), // direct | google | telegram | instagram | whatsapp | … یا دامنهٔ ارجاع / utm_source
+    installed: boolean('installed').notNull().default(false), // باز شده از آیکون روی صفحهٔ گوشی (PWA)
   },
   (t) => [primaryKey({ columns: [t.day, t.visitor] }), index('site_visits_day_idx').on(t.day)],
 );

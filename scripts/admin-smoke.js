@@ -99,8 +99,17 @@ async function user(phone, role, data) {
   // داشبورد واقعی: بازدید، قیف، رویدادها
   await fetch(API + '/api/app/ping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ v: 'smoke' + Date.now(), view: true }) });
   await W.ADMIN_LIVE.reload(); ev("go('dash')");
-  await until(() => $('hero50') && W.document.querySelectorAll('#page .hcard').length === 1 && $('page').textContent.includes('اعلام آمادگی / پاسخ') && $('feed') && /ثبت‌نام کرد/.test($('feed').textContent), 'real dashboard');
-  log('داشبورد واقعی (یک کارت):', $('hero50').querySelector('h2').textContent, '· بازدید امروز', $('hero50').querySelectorAll('.h50box')[1].querySelectorAll('b')[1].textContent, '· رویداد:', $('feed').querySelector('.t').textContent.slice(0, 50));
+  await until(() => $('hero50') && $('hero50').querySelector('.a-kpi') && $('page').textContent.includes('اعلام آمادگی / پاسخ') && $('feed') && /ثبت‌نام کرد/.test($('feed').textContent), 'real dashboard');
+  // دور ۵۱: عدد تصادفی نسخهٔ نمایشی نباید روی «آنلاین» بیاید
+  const on0 = $('onlineN').textContent; await sleep(4500);
+  if ($('onlineN') && $('onlineN').textContent !== on0 && /[۳۴][۰-۹]{2}/.test($('onlineN').textContent)) throw new Error('عدد ساختگی آنلاین: ' + $('onlineN').textContent);
+  const kpi = () => [...$('hero50').querySelectorAll('.a-kpi b')].map((b) => b.textContent);
+  log('داشبورد واقعی (بازدید و رشد):', kpi().join(' · '), '· آنلاین', $('onlineN').textContent, '· رویداد:', $('feed').querySelector('.t').textContent.slice(0, 40));
+  // بازهٔ ۷ روز: نمودار ۷ روزه از سرور
+  [...$('hero50').querySelectorAll('.seg button')].find((b) => b.textContent.includes('۷ روز')).click();
+  await until(() => $('hero50') && $('a51chart') && $('a51chart').querySelectorAll('rect.hit').length === 7, '7-day analytics');
+  [...$('hero50').querySelectorAll('.seg button')].find((b) => b.textContent.includes('امروز')).click();
+  log('بازهٔ ۷ روز و امروز در کارت بازدید عوض شد');
 
   // احراز هویت: تأیید مدرک کارگر
   const wid = w.profile.userId;

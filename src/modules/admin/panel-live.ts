@@ -9,8 +9,9 @@ import { db } from '../../db';
 import { adResponses, ads, contracts, conversations, disputes, kycRequests, profiles, projectPayments, projects, reports, strikes, urgentRequests, users } from '../../db/schema';
 import { ah } from '../../lib/http';
 import { perm, type AdminCtx } from '../../middlewares/auth';
-import { onlineNow, visitStats } from '../../lib/presence';
+import { onlineEntries, visitStats } from '../../lib/presence';
 import { tehranDay } from '../../lib/dates';
+import { analytics, RANGES, type Range } from './analytics';
 import { SAMPLE_PREFIX } from '../../lib/samples';
 
 const ROLE_FA: Record<string, string> = { worker: 'کارگر', specialist: 'متخصص', engineer: 'مهندس', contractor: 'پیمانکار', company: 'شرکت ساختمانی', general: 'کارفرما' };
@@ -97,10 +98,23 @@ export async function peopleStats() {
   return { today: p.today, todayDone: p.today_done, yesterday: p.yesterday, week: p.week, month: p.month, total: p.total, totalDone: p.total_done, daily };
 }
 
+/** آنلاین همین حالا — بدون مدیران و حساب‌های نمونه (و مرورگری که قبلاً با آن‌ها دیده شده) */
 export async function onlineStats() {
-  const p = onlineNow();
-  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(users).where(gte(users.lastSeenAt, new Date(Date.now() - 5 * 60_000)));
-  return { now: p.all, guests: p.guests, members: Math.max(p.members, n) };
+  const list = onlineEntries();
+  if (!list.length) return { now: 0, guests: 0, members: 0 };
+  const vids = list.map(([v]) => v), uids = [...new Set(list.map(([, u]) => u).filter((u): u is string => !!u))];
+  const { rows } = await db.execute<{ visitor: string }>(sql`
+    select distinct x.visitor from site_visits x join users u on u.id = x.user_id
+    where x.visitor in (${sql.join(vids.map((v) => sql`${v}`), sql`, `)}) and (u.is_admin or u.phone like ${SAMPLE_PREFIX + '%'})`);
+  const bad = new Set(rows.map((r) => r.visitor));
+  if (uids.length) {
+    const inner = await db.select({ id: users.id }).from(users).where(and(inArray(users.id, uids), sql`(${users.isAdmin} or ${users.phone} like ${SAMPLE_PREFIX + '%'})`));
+    const innerIds = new Set(inner.map((x) => x.id));
+    list.forEach(([v, u]) => { if (u && innerIds.has(u)) bad.add(v); });
+  }
+  const real = list.filter(([v]) => !bad.has(v));
+  const members = real.filter(([, u]) => u).length;
+  return { now: real.length, guests: real.length - members, members };
 }
 
 export function registerLiveRoutes(r: Router) {
@@ -108,8 +122,9 @@ export function registerLiveRoutes(r: Router) {
     '/live',
     perm('dash', 1),
     ah(async (req, res) => {
-      const [events, visits, online, people] = await Promise.all([recentEvents(req.admin!), visitStats(), onlineStats(), peopleStats()]);
-      res.json({ at: new Date(), online, visits, people, events });
+      const range = (RANGES as readonly string[]).includes(String(req.query.range)) ? (req.query.range as Range) : 'today';
+      const [events, visits, online, people, stats] = await Promise.all([recentEvents(req.admin!), visitStats(), onlineStats(), peopleStats(), analytics(range)]);
+      res.json({ at: new Date(), online, visits, people, analytics: stats, events });
     }),
   );
 }

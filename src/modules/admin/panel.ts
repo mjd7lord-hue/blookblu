@@ -43,6 +43,7 @@ import { adminLog } from './admin.service';
 import { ARB_FIELDS, type ArbField } from '../arbitration/fees';
 import { arbiterBalances, moreSections } from './panel-more';
 import { adFunnel, onlineStats, peopleStats, recentEvents } from './panel-live';
+import { analytics } from './analytics';
 import { visitStats } from '../../lib/presence';
 
 const r = Router();
@@ -294,7 +295,7 @@ async function statsSection(a: AdminCtx) {
     return rows.map((r) => r.n);
   };
   const scope = a.provinces.length ? inArray(profiles.province, a.provinces) : undefined;
-  const [funnel, visits, online, events, people] = await Promise.all([adFunnel(), visitStats(), onlineStats(), recentEvents(a), peopleStats()]);
+  const [funnel, visits, online, events, people, stats] = await Promise.all([adFunnel(), visitStats(), onlineStats(), recentEvents(a), peopleStats(), analytics('today')]);
   const [signups, adsDaily, dealsDaily, byRole, byProv, byType, [convToday], [pend], [escrow]] = await Promise.all([
     series('users'),
     series('ads'),
@@ -331,6 +332,7 @@ async function statsSection(a: AdminCtx) {
     online,
     visits,
     people,
+    analytics: stats,
     funnel,
     events,
     conversationsToday: convToday.n,

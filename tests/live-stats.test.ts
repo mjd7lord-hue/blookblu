@@ -11,7 +11,9 @@ describe('real admin dashboard: online, visits, events, funnel; helpful answers'
     const v1 = 'guest' + Date.now(), v2 = 'member' + Date.now();
     await api().post('/api/app/ping').send({ v: v1, view: true }).expect(200);
     await api().post('/api/app/ping').send({ v: v1, view: true }).expect(200);
-    await api().post('/api/app/ping').set(auth(o.token)).send({ v: v2, view: true }).expect(200);
+    // عضو عادی (بازدید خود مدیر از دور ۵۱ شمرده نمی‌شود)
+    const m = await registered('worker');
+    await api().post('/api/app/ping').set(auth(m.token)).send({ v: v2, view: true }).expect(200);
     expect((await api().post('/api/app/ping').send({ v: 'x' })).status).toBe(400);
     const live = await api().get('/api/admin/panel/live').set(auth(o.token));
     expect(live.status).toBe(200);

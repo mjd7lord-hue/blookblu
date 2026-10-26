@@ -13,7 +13,7 @@ import { badRequest, notFound } from '../../lib/errors';
 import { cfg } from '../../lib/appConfig';
 import { optionalAuth, requireAuth, requireProfile } from '../../middlewares/auth';
 import { supportConversation } from '../chat/chat.service';
-import { ping } from '../../lib/presence';
+import { BOT_UA, normSource, parseUA, ping } from '../../lib/presence';
 
 const r = Router();
 
@@ -22,8 +22,12 @@ r.post(
   '/ping',
   optionalAuth,
   ah(async (req, res) => {
-    const b = parse(z.object({ v: z.string().regex(/^[A-Za-z0-9_-]{8,40}$/), view: z.boolean().optional() }), req.body);
-    await ping(b.v, req.user?.id ?? null, !!b.view);
+    const b = parse(z.object({ v: z.string().regex(/^[A-Za-z0-9_-]{8,40}$/), view: z.boolean().optional(), src: z.string().max(200).optional(), sa: z.boolean().optional() }), req.body);
+    const ua = String(req.headers['user-agent'] || '');
+    // ربات‌ها و ابزارهای پایش بازدید حساب نمی‌شوند
+    if (BOT_UA.test(ua)) return void res.json({ ok: true });
+    const u = parseUA(ua);
+    await ping(b.v, req.user?.id ?? null, !!b.view, { ...u, source: normSource(b.src, u.browser), installed: !!b.sa });
     res.json({ ok: true });
   }),
 );

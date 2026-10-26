@@ -26,7 +26,7 @@ Node 22 · Express 4 · TypeScript (CommonJS) · PostgreSQL روی Supabase · *
 npm run dev            # سرور توسعه (tsx watch)
 npm run typecheck
 npm run test:db        # PostgreSQL تست قابل‌حمل (بدون Docker) روی 5432 روشن می‌کند؛ خاموش: npm run test:db -- stop
-npm test               # ۹۰ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
+npm test               # ۹۲ تست یکپارچه — به PostgreSQL محلی نیاز دارد (پایین)
 npm run db:generate    # بعد از تغییر src/db/schema.ts → فایل SQL تازه در drizzle/
 npm run db:migrate     # اعمال migrationها روی DIRECT_URL (یا DATABASE_URL) + قفل RLS
 npm run storage:check  # آزمایش ذخیرهٔ فایل (آپلود/لینک/حذف) با تنظیمات .env
@@ -138,6 +138,7 @@ docs/API.md    مرجع کامل API — با هر تغییر مسیر، به‌
 - ✅ دور ۴۷ و ۴۸ (کارگاه کارتونی، نقشهٔ پیشرفت) به خواست مجید برگشت خورد؛ کارت خانه همان طرح دور ۴۶ (`hero46.js`) است
 - ✅ دور ۴۹: فشرده‌سازی عکس هنگام آپلود (`optimizeImage` با sharp در files.service: چرخش درست، حذف EXIF، ضلع بزرگ ۱۶۰۰px / مدرک و کارت ۲۴۰۰px / پروفایل ۱۰۲۴px، JPEG ۸۲)؛ عکس KYC بعد از تأیید برای بازبینی می‌ماند (با رد یا حذف حساب پاک)؛ پنل: عکس واقعی مدرک روی کارت (`.docimg`) + «لغو تأیید»؛ نام فقط فارسی (`FA_NAME` در forms.ts = `faOnly` در index.html)؛ دسترسی سریع: «ابزارک‌ها» به‌جای «ثبت آگهی» (`toolsSheet` در trust36.js: بتن، دیوار، کاشی، دستمزد، برآورد، تقویم)
 - ✅ دور ۵۰: داشبورد پنل یک کارت بالا (`#hero50` در pages/round39.js): ثبت‌نام (امروز/کامل/نیمه‌کاره/دیروز/۷ و ۳۰ روز/کل، به روز تهران و بدون حساب نمونه = `peopleStats` در panel-live.ts، در snapshot و `/live`) + بازدید + فعالیت امروز + نمودار ۳۰ روزهٔ بازدیدکننده و ثبت‌نام؛ ورود شماره فقط ۱۱ رقم (`phIn`، +98 ← ۰۹)؛ آیکون خطی ابزارک‌ها (`TIC`)؛ «اعلان روی گوشی» پیش‌فرض روشن برای همه (`blk-push50` در work.js، اجازهٔ مرورگر با اولین لمس)
+- ✅ دور ۵۱: کارت «بازدید و رشد» به سبک GA/Plausible (`#hero50` تمام‌عرض در round39.js، `analytics.ts` + `GET /admin/panel/live?range=today|7d|30d|all`): ۶ شاخص با مقایسه با بازهٔ قبل (یکتا، باز شدن، زمان ماندن، پرش، ثبت‌نام کامل، تبدیل)، نمودار ساعتی/روزانه، منبع ورود، دستگاه/سیستم‌عامل، مرورگر، تازه/برگشتی/عضو/نصب‌شده، قیف ثبت‌نام؛ **بدون مدیران، حساب‌های نمونه و ربات‌ها** (آنلاین هم)؛ `site_visits` + device/os/browser/source/installed (migration 0016؛ `parseUA`/`normSource`/`BOT_UA` در presence.ts، اپ `src` = utm_source یا سایت قبلی و `sa` = نصب‌شده)؛ عدد تصادفی آنلاین نسخهٔ نمایشی (`window._on`) در حالت واقعی خاموش. لینک‌های تبلیغ: `blooko.ir/?utm_source=telegram`
 - ⏭ بعدی (به ترتیب پیشنهادی):
   4. میزبانی: فایل‌ها آماده (render.yaml، پایش، uptime.yml)؛ مانده: ساخت سرویس در Render، DNS دامنهٔ blooko.ir، متغیر API_URL در گیت‌هاب؛ بعد درگاه پرداخت برای داوری
   - درگاه پرداخت (زرین‌پال یا مشابه) برای هزینهٔ داوری — نیاز به حساب پذیرنده
