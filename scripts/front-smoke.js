@@ -227,6 +227,20 @@ async function register(w, role, data) {
   ev(B, 'm46Save()');
   await until(async () => (await ev(B, "LIVE.api('GET','/projects/'+S.projs[S.role][0]._id)")).project.progress.length === 4, 'task added from manage sheet');
   log('مدیریت پروژه از کارت خانه: کار تازه به فهرست اضافه و روی سرور ذخیره شد');
+  // دور ۴۹: «ابزارک‌ها» جای «ثبت آگهی» در دسترسی سریع؛ محاسبهٔ بتن و کاشی
+  ev(B, 'closeSheet()');
+  const qa = B.document.querySelector('#qa42');
+  if (!qa || /ثبت آگهی/.test(qa.textContent) || !/ابزارک‌ها/.test(qa.textContent)) throw new Error('دسترسی سریع: «ابزارک‌ها» نیست یا «ثبت آگهی» مانده');
+  [...qa.querySelectorAll('button')].find((b) => /ابزارک‌ها/.test(b.textContent)).click();
+  await until(() => B.document.querySelector('#sb .tl-grid'), 'tools sheet');
+  ev(B, "tlOpen('conc');['tlL','tlW','tlH'].forEach((k,i)=>document.getElementById(k).value=['۵','۴','۱۰'][i]);tlCalc()");
+  const conc = B.document.getElementById('tlOut').textContent;
+  if (!/۱۵ کیسه/.test(conc)) throw new Error('محاسبهٔ بتن اشتباه است: ' + conc);
+  ev(B, "TS49.tile=2;tlOpen('tile');document.getElementById('tlL').value='۴';document.getElementById('tlW').value='۳/۵';tlCalc()");
+  const tile = B.document.getElementById('tlOut').textContent;
+  if (!/۴۲ عدد/.test(tile)) throw new Error('محاسبهٔ کاشی اشتباه است: ' + tile);
+  ev(B, 'closeSheet()');
+  log('ابزارک‌ها: بتن ۵×۴×۱۰ ← ۱۵ کیسه سیمان؛ کاشی ۶۰×۶۰ برای ۴×۳٫۵ متر ← ۴۲ عدد');
   // پرداخت: فقط کارفرما ثبت می‌کند؛ مجری دریافت را تأیید می‌کند
   if (B.document.querySelector('#s-pdet .sec-head button[onclick^="addPay"]')) throw new Error('مجری نباید دکمهٔ «ثبت پرداخت» ببیند');
   ev(A, 'openProjPage(0)');

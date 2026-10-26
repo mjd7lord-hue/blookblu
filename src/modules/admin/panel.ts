@@ -20,6 +20,7 @@ import {
   conversations,
   disputes,
   documents,
+  files,
   guarantees,
   kycRequests,
   profiles,
@@ -92,7 +93,9 @@ async function usersSection(a: AdminCtx, withKyc: boolean) {
     withKyc
       ? db.selectDistinctOn([kycRequests.userId]).from(kycRequests).where(inArray(kycRequests.userId, ids)).orderBy(kycRequests.userId, desc(kycRequests.createdAt))
       : Promise.resolve([] as (typeof kycRequests.$inferSelect)[]),
-    withKyc ? db.select().from(documents).where(inArray(documents.userId, ids)).orderBy(desc(documents.createdAt)) : Promise.resolve([] as (typeof documents.$inferSelect)[]),
+    withKyc
+      ? db.select({ d: documents, mime: files.mime }).from(documents).leftJoin(files, eq(files.id, documents.fileId)).where(inArray(documents.userId, ids)).orderBy(desc(documents.createdAt))
+      : Promise.resolve([] as { d: typeof documents.$inferSelect; mime: string | null }[]),
   ]);
   return us.map((u) => {
     const mine = ps.filter((p) => p.userId === u.id);
@@ -141,8 +144,8 @@ async function usersSection(a: AdminCtx, withKyc: boolean) {
         ? { id: k.id, status: k.status, idType: k.idType, idNumber: k.idNumber, firstName: k.firstName, lastName: k.lastName, cardUrl: signed(k.cardFileId), selfieUrl: signed(k.selfieFileId), rejectReason: k.rejectReason, createdAt: k.createdAt }
         : null,
       docs: docs
-        .filter((x) => x.userId === u.id)
-        .map((x) => ({ id: x.id, title: x.title, group: x.group, status: x.status, profileId: x.profileId, url: signed(x.fileId), rejectReason: x.rejectReason, expiresAt: x.expiresAt, createdAt: x.createdAt })),
+        .filter(({ d: x }) => x.userId === u.id)
+        .map(({ d: x, mime }) => ({ id: x.id, title: x.title, group: x.group, status: x.status, profileId: x.profileId, url: signed(x.fileId), mime, rejectReason: x.rejectReason, expiresAt: x.expiresAt, reviewedAt: x.reviewedAt, createdAt: x.createdAt })),
     };
   });
 }

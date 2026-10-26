@@ -119,6 +119,13 @@ async function user(phone, role, data) {
   await until(async () => (await call('GET', '/me', null, w.token)).user.kycStatus === 'verified', 'kyc approved');
   await until(() => ev(`uById('${wid}').kyc`) === 'ok', 'panel refreshed');
   log('احراز هویت کارگر از پنل تأیید شد (نشان آبی)');
+  // بعد از تأیید: کارت مدرک عکس واقعی دارد (نه کارت نمایشی تیره) و دوباره باز می‌شود
+  ev(`openUser('${wid}','docs')`);
+  await until(() => W.document.querySelector('.docimg img'), 'real document thumbnail');
+  if (W.document.querySelector('.docth')) throw new Error('کارت نمایشی تیرهٔ مدرک هنوز هست');
+  const th = W.document.querySelector('.docimg img').getAttribute('src');
+  if (!(await fetch(th)).ok) throw new Error('عکس مدرک تأییدشده باز نشد');
+  log('بازبینی دوباره: عکس کارت و سلفی بعد از تأیید هم دیده می‌شود ·', W.document.querySelectorAll('.docimg img').length, 'عکس');
 
   // تعلیق و فعال‌سازی
   ev(`userAct('${wid}','susp')`);

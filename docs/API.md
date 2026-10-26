@@ -274,7 +274,7 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | POST | `/me/kyc` | multipart: `card` (روی کارت ملی/کارت اقامت)، `selfie` (سلفی با کارت)، `idType?` (`national`\|`foreign`)، `idNumber?`، `firstName?`، `lastName?` | نام پیش‌فرض از حساب. کد ملی با رقم کنترل بررسی می‌شود |
 
 خطاها: `NO_FILE` (هر دو عکس لازم است)، `NATIONAL_CODE_INVALID`، `ID_NUMBER_INVALID`، `KYC_PENDING`، `KYC_DONE`، `KYC_NAME`.
-بعد از تأیید: `identityVerified=true`، ۱۰ امتیاز «احراز هویت» در `trust`، نام قفل می‌شود (`KYC_LOCKED`). **عکس‌های کارت بعد از بررسی (تأیید یا رد) پاک می‌شوند.**
+بعد از تأیید: `identityVerified=true`، ۱۰ امتیاز «احراز هویت» در `trust`، نام قفل می‌شود (`KYC_LOCKED`). **عکس کارت و سلفی بعد از تأیید برای بازبینی مدیر می‌ماند (خصوصی، فقط با لینک امضاشده)؛ با رد درخواست یا حذف حساب پاک می‌شود.**
 کد ملی هرگز به کاربران دیگر نشان داده نمی‌شود؛ خود کاربر فقط `idNumberMasked` می‌بیند.
 
 **نشان «مدرک‌دار» (`verified`)** = حداقل یک مدرکِ تأییدشده و منقضی‌نشده برای همان نقش. با انقضا خودکار (هر ساعت) برداشته می‌شود.

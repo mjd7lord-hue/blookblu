@@ -73,8 +73,9 @@ describe('KYC and admin panel', () => {
     expect(pub.body.profile.trust.identity).toBe(10);
     expect(pub.body.profile.name).toBe('رضا بهمنی‌نژاد');
 
-    // عکس‌های کارت بعد از بررسی پاک شده‌اند
-    expect((await api().get(k.cardUrl)).status).toBe(404);
+    // عکس کارت برای بازبینی مدیر می‌ماند؛ دیگران دسترسی ندارند
+    expect((await api().get(k.cardUrl)).status).toBe(200);
+    expect((await api().get(bare).set(auth(other.token))).status).toBe(404);
     // نام بعد از تأیید قفل است
     const rename = await api().patch('/api/me/roles/worker').set(auth(w.token)).send({ data: { fn: 'علی' } });
     expect(rename.body.error.code).toBe('FIELD_LOCKED');

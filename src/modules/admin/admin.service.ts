@@ -134,8 +134,7 @@ export async function approveKyc(admin: User, id: string, input: { firstName?: s
     await applyVerifiedName(tx, k.userId, firstName, lastName);
     await adminLog(tx, admin, 'kyc.approve', 'kyc', id, dups.length ? `تکراری: ${dups.map((d) => d.phone).join('، ')}` : null);
   });
-  // وعدهٔ حریم خصوصی: تصویر کارت بعد از بررسی از دسترس خارج می‌شود
-  await purgeFiles([k.cardFileId, k.selfieFileId]);
+  // تصویر کارت و سلفی برای بازبینی دوبارهٔ مدیر می‌ماند (خصوصی، فقط با لینک امضاشده)؛ با رد یا حذف حساب پاک می‌شود
   await notify(k.userId, {
     type: 'id',
     title: 'هویت شما تأیید شد',

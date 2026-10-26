@@ -28,6 +28,10 @@ export type Field = {
 
 export type Step = { title: string; f: Field[] };
 
+/** نام شخص: فقط حروف فارسی، فاصله و نیم‌فاصله (هم‌تراز با faOnly در اپ) */
+const FA_NAME = /^[ء-غف-ٰٕپچژکگۀی‌ ]+$/;
+const faName = { pattern: FA_NAME, patternMsg: 'نام را فقط با حروف فارسی بنویس' };
+
 export const PROVINCES = [
   'آذربایجان شرقی', 'آذربایجان غربی', 'اردبیل', 'اصفهان', 'البرز', 'ایلام', 'بوشهر', 'تهران',
   'چهارمحال و بختیاری', 'خراسان جنوبی', 'خراسان رضوی', 'خراسان شمالی', 'خوزستان', 'زنجان',
@@ -59,8 +63,8 @@ const NAT: Field[] = [
 const BASE: Step = {
   title: 'اطلاعات پایه',
   f: [
-    { k: 'fn', t: 'text', label: 'نام', req: true, locked: true },
-    { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true, locked: true },
+    { k: 'fn', t: 'text', label: 'نام', req: true, locked: true, ...faName },
+    { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true, locked: true, ...faName },
     ...NAT,
     // اختیاری؛ سن روی شناسنامهٔ کاری
     { k: 'by', t: 'text', label: 'سال تولد', pattern: /^1[34]\d\d$/, patternMsg: 'سال تولد را شمسی و ۴ رقمی بنویس، مثلاً ۱۳۶۵', locked: true },
@@ -240,7 +244,7 @@ export const REG: Record<Role, Step[]> = {
     {
       title: 'نمایندهٔ شرکت',
       f: [
-        { k: 'fn', t: 'text', label: 'نام و نام خانوادگی نماینده', req: true },
+        { k: 'fn', t: 'text', label: 'نام و نام خانوادگی نماینده', req: true, ...faName },
         { k: 'pos', t: 'text', label: 'سمت', req: true },
       ],
     },
@@ -251,8 +255,8 @@ export const REG: Record<Role, Step[]> = {
     {
       title: 'اطلاعات پایه',
       f: [
-        { k: 'fn', t: 'text', label: 'نام', req: true, locked: true },
-        { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true, locked: true },
+        { k: 'fn', t: 'text', label: 'نام', req: true, locked: true, ...faName },
+        { k: 'ln', t: 'text', label: 'نام خانوادگی', req: true, locked: true, ...faName },
         ...NAT,
         { k: 'prov', t: 'prov', label: 'استان ملک', req: true },
         { k: 'city', t: 'city', label: 'شهر', req: true },

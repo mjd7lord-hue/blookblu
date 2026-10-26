@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import sharp from 'sharp';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../db';
 import { conversationMembers, files, profiles, projects, type FILE_PURPOSES } from '../../db/schema';
@@ -74,6 +75,31 @@ export function stripJpegMeta(b: Buffer): Buffer {
   return b;
 }
 
+/* ---------- کم کردن حجم عکس ---------- */
+
+// مدرک و کارت باید خوانا بماند (ضلع بزرگ تا ۲۴۰۰px)؛ بقیه تا ۱۶۰۰px، عکس پروفایل ۱۰۲۴px
+const MAX_SIDE: Partial<Record<FilePurpose, number>> = { document: 2400, kyc: 2400, receipt: 2400, avatar: 1024 };
+
+/**
+ * عکس را با کیفیت خوب (JPEG ۸۲ با mozjpeg) کوچک می‌کند؛ چرخش عکس گوشی درست و EXIF/GPS حذف می‌شود.
+ * عکس شفاف PNG می‌ماند. اگر نتیجه بزرگ‌تر شد یا خطا داد، همان فایل اصلی (بدون EXIF) برمی‌گردد.
+ */
+export async function optimizeImage(buf: Buffer, mime: string, purpose: FilePurpose): Promise<{ body: Buffer; mime: string }> {
+  const plain = { body: mime === 'image/jpeg' ? stripJpegMeta(buf) : buf, mime };
+  try {
+    const side = MAX_SIDE[purpose] ?? 1600;
+    const img = sharp(buf, { failOn: 'none' }).rotate();
+    const meta = await img.metadata();
+    const resized = img.resize({ width: side, height: side, fit: 'inside', withoutEnlargement: true });
+    const out = meta.hasAlpha
+      ? { body: await resized.png({ compressionLevel: 9, palette: true, quality: 90 }).toBuffer(), mime: 'image/png' }
+      : { body: await resized.jpeg({ quality: 82, mozjpeg: true }).toBuffer(), mime: 'image/jpeg' };
+    return out.body.length < plain.body.length ? out : plain;
+  } catch {
+    return plain;
+  }
+}
+
 /* ---------- ذخیره ---------- */
 
 export async function saveUpload(
@@ -90,13 +116,13 @@ export async function saveUpload(
       'FILE_TYPE',
     );
   }
-  const body = mime === 'image/jpeg' ? stripJpegMeta(file.buffer) : file.buffer;
+  const { body, mime: outMime } = (IMAGE_MIMES as readonly string[]).includes(mime) ? await optimizeImage(file.buffer, mime, purpose) : { body: file.buffer, mime };
   if (body.length > rule.maxBytes) {
     throw badRequest(`حجم فایل حداکثر ${rule.maxBytes / MB} مگابایت است`, 'FILE_TOO_LARGE');
   }
   const d = new Date();
-  const key = `${purpose}/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${crypto.randomUUID()}.${EXT[mime]}`;
-  await storage.put(key, body, mime);
+  const key = `${purpose}/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${crypto.randomUUID()}.${EXT[outMime]}`;
+  await storage.put(key, body, outMime);
   try {
     const [row] = await db
       .insert(files)
@@ -104,7 +130,7 @@ export async function saveUpload(
         ownerUserId,
         purpose,
         storageKey: key,
-        mime,
+        mime: outMime,
         size: body.length,
         originalName: cleanName(file.originalname),
         isPublic: rule.isPublic,

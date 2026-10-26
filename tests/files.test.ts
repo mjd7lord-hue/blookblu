@@ -238,3 +238,29 @@ describe('files: avatar, portfolio, documents, chat attachments', () => {
     expect((await api().get(doc.body.document.file.url)).status).toBe(404);
   });
 });
+
+describe('files: image optimization', () => {
+  it('big photo: resized, smaller, rotated by EXIF, metadata removed; transparent PNG stays PNG', async () => {
+    const sharp = (await import('sharp')).default;
+    const { optimizeImage } = await import('../src/modules/files/files.service');
+    const noise = Buffer.alloc(3000 * 2000 * 3);
+    for (let i = 0; i < noise.length; i++) noise[i] = (i * 7919) % 251;
+    // گوشی عکس را خوابیده ذخیره کرده و orientation=6 گذاشته
+    const raw = await sharp(noise, { raw: { width: 3000, height: 2000, channels: 3 } }).jpeg({ quality: 98 }).withMetadata({ orientation: 6 }).toBuffer();
+    const out = await optimizeImage(raw, 'image/jpeg', 'portfolio');
+    expect(out.mime).toBe('image/jpeg');
+    expect(out.body.length).toBeLessThan(raw.length);
+    const m = await sharp(out.body).metadata();
+    expect([m.width, m.height]).toEqual([1067, 1600]);
+    expect(m.orientation ?? 1).toBe(1);
+    expect(m.exif).toBeUndefined();
+    // مدرک: وضوح بیشتر برای خوانایی
+    const doc = await sharp((await optimizeImage(raw, 'image/jpeg', 'document')).body).metadata();
+    expect(Math.max(doc.width!, doc.height!)).toBe(2400);
+
+    const alpha = await sharp({ create: { width: 2000, height: 2000, channels: 4, background: { r: 200, g: 50, b: 0, alpha: 0.5 } } }).png({ compressionLevel: 0 }).toBuffer();
+    const pa = await optimizeImage(alpha, 'image/png', 'avatar');
+    expect(pa.mime).toBe('image/png');
+    expect((await sharp(pa.body).metadata()).width).toBe(1024);
+  });
+});
