@@ -47,7 +47,8 @@ async function metrics(from: string, to: string) {
     bounceRate: m.visits ? Math.round((m.bounces / m.visits) * 1000) / 10 : 0,
     members: m.members, guests: m.visitors - m.members, installed: m.installed, returning: m.returning, newVisitors: m.visitors - m.returning,
     signups: s.done, accounts: s.signups, halfDone: s.signups - s.done, phones: Math.max(o.phones, s.signups),
-    conversion: m.visitors ? Math.round((s.done / m.visitors) * 1000) / 10 : 0,
+    // ثبت‌نامی که بدون پینگ اپ آمده (مثلاً از نسخهٔ قدیمی) نرخ را از ۱۰۰٪ بالاتر نبرد
+    conversion: m.visitors ? Math.min(100, Math.round((s.done / m.visitors) * 1000) / 10) : 0,
   };
 }
 
