@@ -15,6 +15,7 @@ import adRoutes, { responsesRouter } from './modules/ads/ads.routes';
 import savedRoutes from './modules/saved/saved.routes';
 import { guaranteesRouter } from './modules/trust/trust.routes';
 import { strikesRouter } from './modules/trust/strikes';
+import payRoutes from './modules/pay/pay.routes';
 import chatRoutes, { messagesRouter } from './modules/chat/chat.routes';
 import eventsRoutes from './modules/chat/events.routes';
 import projectRoutes from './modules/projects/projects.routes';
@@ -120,6 +121,7 @@ export function createApp() {
   app.use('/api/events', eventsRoutes);
   app.use('/api/guarantees', guaranteesRouter);
   app.use('/api/strikes', strikesRouter);
+  app.use('/api/pay', payRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api', safetyRoutes);
 

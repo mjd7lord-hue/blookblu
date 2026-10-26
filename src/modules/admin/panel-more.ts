@@ -49,6 +49,7 @@ import { fileUrl } from '../files/files.service';
 import { notify } from '../notifications/notify';
 import { postMessage } from '../chat/chat.service';
 import { allFields } from '../roles/forms';
+import { adminPayments } from '../pay/pay.service';
 import { adminLog } from './admin.service';
 
 const r = Router();
@@ -538,6 +539,16 @@ async function txSection(a: AdminCtx) {
     if (c.paymentStatus === 'released') out.push({ id: c.id + ':s', kind: 'release', label: 'آزاد شدن سهم حل‌کننده', userId: null, amount: c.arbiterShare, at: c.releasedAt ?? c.updatedAt, status: 'ok', ref: null, projectId });
   }
   for (const { o, userId } of outs) out.push({ id: o.id, kind: 'payout', label: 'تسویه به حساب حل‌کننده', userId, amount: o.amount, at: o.createdAt, status: 'ok', ref: o.ref, projectId: null });
+  // دور ۵۳: پرداخت‌های درگاه (ارتقای آگهی، و تلاش‌های ناموفق/نیازمند بازگشت وجه داوری؛ داوری موفق همان ردیف پرونده است)
+  for (const g of await adminPayments(500)) {
+    if (g.purpose === 'arbitration' && g.status === 'paid' && !g.failReason) continue;
+    out.push({
+      id: 'gw:' + g.id, kind: g.purpose === 'boost' ? 'boost' : 'arb',
+      label: (g.purpose === 'boost' ? 'ارتقای آگهی (درگاه)' : 'هزینهٔ داوری (درگاه)') + (g.status === 'paid' && g.failReason ? ' · بازگشت وجه لازم' : g.status === 'expired' ? ' · منقضی' : g.status === 'failed' ? ' · ناموفق' : ''),
+      userId: g.userId, amount: g.amount, at: g.paidAt ?? g.createdAt, status: g.status === 'paid' ? (g.failReason ? 'fail' : 'ok') : g.status === 'pending' ? 'pending' : 'fail',
+      ref: g.refId ? 'پیگیری ' + g.refId : g.failReason, projectId: null,
+    });
+  }
   return out.sort((x, y) => +new Date(y.at) - +new Date(x.at)).slice(0, 800);
 }
 

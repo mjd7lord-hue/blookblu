@@ -118,7 +118,7 @@ describe('on-site arbitration', () => {
 
     const rq = await api().post(`/api/disputes/${d0.id}/arbitration`).set(auth(boss.token)).send(body);
     expect(rq.status).toBe(201);
-    expect(rq.body.payment).toMatchObject({ amount: 4690000, method: 'manual' });
+    expect(rq.body.payment).toMatchObject({ amount: 4690000, method: 'gateway' });
     expect(rq.body.dispute).toMatchObject({ status: 'arbitration', stage: 2 });
     expect(rq.body.dispute.case).toMatchObject({ status: 'awaiting_payment', paymentStatus: 'unpaid', paidByMe: true, arbiter: null });
     const caseId = rq.body.dispute.case.id;

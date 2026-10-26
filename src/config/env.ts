@@ -62,6 +62,17 @@ const schema = z.object({
   PUBLIC_BASE_URL: optUrl.transform((v) => v?.replace(/\/+$/, '')),
   // راهنمای پرداخت امانی هزینهٔ داوری (تا درگاه بانکی وصل شود)، مثلاً شمارهٔ کارت/شبا و نام
   ARB_PAYMENT_INFO: optStr,
+  // درگاه پرداخت (دور ۵۳): zarinpal | fake (آزمایشی داخلی، بدون پول واقعی) — خالی: zarinpal اگر MERCHANT هست، وگرنه fake
+  PAYMENT_DRIVER: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['zarinpal', 'fake']).optional()),
+  // کد ۳۶ حرفی پذیرنده از پنل زرین‌پال (مخفی؛ فقط .env و Render)
+  ZARINPAL_MERCHANT: optStr,
+  // true = sandbox.zarinpal.com (پرداخت آزمایشی)؛ با کد واقعی false کن
+  ZARINPAL_SANDBOX: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  // بعد از پرداخت کاربر به این آدرس اپ برمی‌گردد
+  APP_URL: optUrl.transform((v) => (v ?? 'https://blooko.ir').replace(/\/+$/, '')),
   // فقط در توسعه: کد OTP در پاسخ API برگردانده می‌شود تا تست راحت باشد
   OTP_DEV_ECHO: z
     .enum(['true', 'false'])
@@ -100,6 +111,12 @@ if (env.STORAGE_DRIVER === 'supabase' && !(env.SUPABASE_URL && env.SUPABASE_SERV
 
 if (env.STORAGE_DRIVER === 's3' && !(env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY && env.S3_SECRET_KEY)) {
   console.error('❌ برای STORAGE_DRIVER=s3 باید S3_ENDPOINT، S3_BUCKET، S3_ACCESS_KEY و S3_SECRET_KEY تنظیم شوند');
+  process.exit(1);
+}
+
+export const PAYMENT_DRIVER: 'zarinpal' | 'fake' = env.PAYMENT_DRIVER ?? (env.ZARINPAL_MERCHANT ? 'zarinpal' : 'fake');
+if (PAYMENT_DRIVER === 'zarinpal' && !(env.ZARINPAL_MERCHANT && /^[0-9a-f-]{36}$/i.test(env.ZARINPAL_MERCHANT))) {
+  console.error('❌ برای PAYMENT_DRIVER=zarinpal باید ZARINPAL_MERCHANT (کد ۳۶ حرفی پذیرنده) تنظیم شود');
   process.exit(1);
 }
 

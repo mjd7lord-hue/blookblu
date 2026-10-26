@@ -41,6 +41,7 @@ const html = fs
   .replace('<script src="i18n-extra.js"></script>', inline('i18n-extra.js'))
   .replace('<script src="trust36.js"></script>', inline('trust36.js'))
   .replace('<script src="real.js"></script>', inline('real.js'))
+  .replace('<script src="pay.js"></script>', inline('pay.js'))
   .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
@@ -372,6 +373,24 @@ async function register(w, role, data) {
   ev(A, `acceptResp('${adId}','${ev(B, 'LIVE.pub.code')}')`);
   await until(async () => (await ev(A, "LIVE.api('GET','/responses?dir=in')")).items[0].status === 'accepted', 'response accepted');
   log('آگهی‌های من: توقف و فعال‌سازی، پذیرش پاسخ کارگر');
+
+  // دور ۵۳: درگاه پرداخت — دکمهٔ پرداخت آنلاین داوری، قیمت ارتقا از سرور، پرداخت آزمایشی ← نشان «ویژه»
+  if (!/پرداخت آنلاین هزینهٔ داوری/.test(ev(A, 'arbBox(S.disp[0])'))) throw new Error('دکمهٔ «پرداخت آنلاین» روی پروندهٔ داوری نیست');
+  ev(A, `openBoost('${adId}')`);
+  await until(() => ev(A, "S.cur==='boost' && BOOST.find(x=>x[0]==='star')[3]===149000"), 'boost page with server prices');
+  ev(A, "S.bst.pick='star';payBoost()");
+  await until(() => ev(A, "document.getElementById('pyGo')"), 'boost pay sheet');
+  const ps = await ev(A, `LIVE.api('POST','/pay',{purpose:'boost',targetId:'${adId}',plan:'star'})`);
+  const r1 = await fetch(ps.url, { method: 'POST', redirect: 'manual' });
+  const r2 = await fetch(new URL(r1.headers.get('location'), ps.url), { redirect: 'manual' });
+  if (!/\?pay=/.test(r2.headers.get('location') || '')) throw new Error('برگشت از درگاه به اپ نیامد');
+  const pr = await ev(A, `LIVE.api('GET','/pay/${ps.id}')`);
+  if (pr.payment.status !== 'paid') throw new Error('پرداخت آزمایشی ثبت نشد: ' + JSON.stringify(pr.payment));
+  ev(A, 'closeSheet()');
+  await ev(A, 'LIVE.loadMyAds(true)');
+  const badge = ev(A, `(()=>{const a=ADS.find(x=>x.id==='${adId}'&&x._mine);return a&&a.boost==='star'&&/bst-badge star/.test(adCard(a,P[a.who]||ME()))})()`);
+  if (!badge) throw new Error('نشان «ویژه» بعد از پرداخت روی آگهی نیامد');
+  log('درگاه: قیمت ارتقا از سرور، پرداخت آزمایشی موفق · کد پیگیری', pr.payment.refId, '· نشان «ویژه» روی آگهی');
 
   ev(B, "LIVE.loaded.req=0;S.rtab='out';go('req')");
   await until(() => ev(B, "S.out.length && S.out[0].st==='ok' && S.out[0].to.startsWith('B-')"), 'outgoing requests');

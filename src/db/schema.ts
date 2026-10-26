@@ -199,6 +199,10 @@ export const ads = pgTable(
     views: integer('views').notNull().default(0),
     responsesCount: integer('responses_count').notNull().default(0),
     expiresAt: ts('expires_at'),
+    // ارتقای پولی (دور ۵۳): ویژه = بالای کاوش تا featuredUntil · فوری = برچسب قرمز تا urgentUntil · نردبان = bumpedAt جای تاریخ ثبت در ترتیب
+    featuredUntil: ts('featured_until'),
+    urgentUntil: ts('urgent_until'),
+    bumpedAt: ts('bumped_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -1298,4 +1302,41 @@ export const siteVisits = pgTable(
     installed: boolean('installed').notNull().default(false), // باز شده از آیکون روی صفحهٔ گوشی (PWA)
   },
   (t) => [primaryKey({ columns: [t.day, t.visitor] }), index('site_visits_day_idx').on(t.day)],
+);
+
+/* ---------- درگاه پرداخت (دور ۵۳) ---------- */
+
+export const gatewayPaymentStatusEnum = pgEnum('gateway_payment_status', ['pending', 'paid', 'failed', 'expired']);
+
+/**
+ * هر تلاش پرداخت از درگاه یک ردیف. مبلغ همیشه روی سرور حساب می‌شود (نه از اپ)؛
+ * تأیید فقط با verify خود درگاه و با همان مبلغ ذخیره‌شده؛ authority یکتا تا یک پرداخت دو بار اعمال نشود.
+ */
+export const gatewayPayments = pgTable(
+  'gateway_payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    purpose: varchar('purpose', { length: 20 }).notNull(), // arbitration | boost
+    targetId: uuid('target_id').notNull(), // arbitration_cases.id یا ads.id
+    plan: varchar('plan', { length: 20 }), // ارتقا: urgent | ladder | star
+    amount: bigint('amount', { mode: 'number' }).notNull(), // تومان
+    description: varchar('description', { length: 200 }).notNull(),
+    gateway: varchar('gateway', { length: 20 }).notNull(), // zarinpal | fake
+    authority: varchar('authority', { length: 64 }),
+    status: gatewayPaymentStatusEnum('status').notNull().default('pending'),
+    refId: varchar('ref_id', { length: 40 }), // شمارهٔ پیگیری بانک
+    cardPan: varchar('card_pan', { length: 20 }), // کارت ماسک‌شده (6037-99**-****-1234)
+    failReason: varchar('fail_reason', { length: 200 }),
+    createdAt: createdAt(),
+    paidAt: ts('paid_at'),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('gateway_payments_authority_uq').on(t.authority),
+    index('gateway_payments_user_idx').on(t.userId, t.createdAt),
+    index('gateway_payments_target_idx').on(t.purpose, t.targetId),
+  ],
 );

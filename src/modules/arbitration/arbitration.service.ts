@@ -325,9 +325,9 @@ function paymentInfo(c: Case) {
   return {
     caseId: c.id,
     amount: c.total,
-    method: 'manual',
-    // فعلاً پرداخت دستی (کارت/پشتیبانی) و تأیید ادمین؛ درگاه بانکی بعداً
-    instructions: env.ARB_PAYMENT_INFO ?? 'برای پرداخت امانی با پشتیبانی بلوک در چت هماهنگ کن؛ پس از تأیید پرداخت، حل‌کننده تعیین می‌شود.',
+    // دور ۵۳: پرداخت آنلاین از درگاه (POST /api/pay {purpose:'arbitration', targetId: caseId})؛ راه دستی هم برای پشتیبانی می‌ماند
+    method: 'gateway',
+    instructions: env.ARB_PAYMENT_INFO ?? 'با «پرداخت آنلاین» از درگاه بانکی پرداخت کن؛ بلافاصله بعد از پرداخت، حل‌کنندهٔ بی‌طرف تعیین می‌شود.',
   };
 }
 
@@ -819,6 +819,12 @@ export async function adminConfirmPayment(admin: User, id: string, ref: string) 
       .where(eq(arbitrationCases.id, id));
     await adminLog(tx, admin, 'arbitration.paid', 'arbitration', id, `${faNum(c.total)} تومان · ${ref}`);
   });
+  return afterArbPaid(id);
+}
+
+/** بعد از پرداخت (دستی ادمین یا درگاه): خبر به پرداخت‌کننده و پیدا کردن حل‌کنندهٔ بی‌طرف */
+export async function afterArbPaid(id: string) {
+  const c = await adminCase(id);
   const { parties } = await partiesOf(c.disputeId);
   const payer = parties.find((p) => p.id === c.payerProfileId);
   if (payer) await notify(payer.userId, { type: 'req', title: 'پرداخت امانی تأیید شد', body: 'دنبال حل‌کنندهٔ بی‌طرف می‌گردیم', link: { screen: 'disp', id: c.disputeId } });

@@ -53,3 +53,10 @@ services:
         value: https://api.blooko.ir
       - key: ARB_PAYMENT_INFO
         sync: false
+      # درگاه پرداخت زرین‌پال (دور ۵۳): کد ۳۶ حرفی پذیرنده از panel.zarinpal.com — تا خالی است، دکمهٔ پرداخت «به‌زودی» نشان می‌دهد
+      - key: ZARINPAL_MERCHANT
+        sync: false
+      - key: ZARINPAL_SANDBOX # روی سرور اصلی فقط درگاه واقعی پذیرفته می‌شود
+        value: 'false'
+      - key: APP_URL # بعد از پرداخت کاربر به اینجا برمی‌گردد
+        value: https://blooko.ir

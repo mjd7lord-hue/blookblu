@@ -628,3 +628,17 @@ snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, 
 امتیاز اعتبار (دور ۴۱): `trust = { satisfaction(۵۵), projects(۲۵), reviews(۱۰), identity(۱۰), start(۱۰ ثبت‌نام), docs(۵ مدرک تأییدشده), adj, total }`؛ total بین ۰ و ۱۰۰. نویسندهٔ آگهی و نتیجهٔ جست‌وجو `identityVerified` هم دارند.
 
 حساب‌های نمونه (دور ۴۲): کاربران با شمارهٔ `0900000…` در `/ads` (کاوش)، `/ads/:id/answers`، جست‌وجوی پروفایل و نیروی فوری نمی‌آیند، مگر `settings.flags.showSamples = true`.
+
+## درگاه پرداخت (دور ۵۳) — `/api/pay`
+
+زرین‌پال نسخهٔ ۴ (`PAYMENT_DRIVER`: `zarinpal` با `ZARINPAL_MERCHANT`، یا `fake` = صفحهٔ آزمایشی داخلی برای توسعه و تست). روی production فقط زرین‌پال واقعی (نه sandbox و نه fake) پذیرفته می‌شود؛ وگرنه `GATEWAY_OFF`.
+
+| روش | مسیر | ورودی | توضیح |
+|---|---|---|---|
+| GET | `/pay/plans` | — | `{ plans: [{ k: urgent|ladder|star, n, p (تومان), d }], online, test }` — قیمت‌ها از `app_config.boost` (پنل) |
+| POST | `/pay` (ورود) | `{ purpose: 'arbitration', targetId: caseId }` یا `{ purpose: 'boost', targetId: adId, plan }` | مبلغ را سرور حساب می‌کند؛ فقط پرداخت‌کنندهٔ پرونده / صاحب آگهی ← `201 { id, url, amount, gateway }`؛ اپ به `url` می‌رود. خطاها: `NOT_PAYER`، `NOT_OWNER`، `NOT_AWAITING_PAYMENT`، `AD_NOT_ACTIVE`، `BOOST_PLAN`، `BOOST_OFF`، `GATEWAY_OFF`، `GATEWAY_DOWN` |
+| GET | `/pay/callback?Authority&Status` | — | برگشت از درگاه: verify با مبلغ ذخیره‌شده (Status=OK به‌تنهایی کافی نیست)، اعمال یک‌باره در تراکنش ← `303` به `APP_URL/?pay=<id>` |
+| GET | `/pay/:id` (ورود، فقط صاحب) | — | `{ payment: { id, purpose, targetId, plan, amount, status: pending|paid|failed|expired, refId, cardPan, failReason, paidAt } }` |
+| GET | `/pay/mine` (ورود) | — | ۵۰ پرداخت آخر من |
+
+اثر پرداخت: داوری ← `paymentStatus=paid`، `status=matching` و پیشنهاد به حل‌کننده (مثل `confirm-payment` ادمین) · ویژه ← `ads.featured_until` +۷ روز (اول کاوش) · فوری ← `urgent_until` +۲۴ ساعت · نردبان ← `bumped_at` (ترتیب). پرداخت pending بعد از ۳۰ دقیقه `expired`. پرداخت موفقی که اثرش قبلاً انجام شده بود `failReason` «بازگشت وجه لازم است» می‌گیرد و در تراکنش‌های پنل دیده می‌شود.

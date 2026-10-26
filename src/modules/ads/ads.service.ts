@@ -212,12 +212,18 @@ export async function explore(q: ExploreQuery, viewer?: User) {
 
   // «بهترین»: اعتبار نویسنده (همان فرمول امتیاز) و بعد تازگی
   const trustExpr = sql`(round(${profiles.ratingAvg} / 5 * 55) + least(25, ${profiles.doneCount}) + least(10, round(${profiles.ratingCount} / 2.0)) + case when ${users.kycStatus} = 'verified' then 10 else 0 end)`;
-  const order = {
-    best: [desc(trustExpr), desc(ads.createdAt)],
-    new: [desc(ads.createdAt)],
-    rating: [desc(profiles.ratingAvg), desc(ads.createdAt)],
-    exp: [desc(profiles.doneCount), desc(ads.createdAt)],
-  }[q.sort];
+  // دور ۵۳: آگهی «ویژه» (پرداخت‌شده و منقضی‌نشده) همیشه اول؛ «نردبان» تاریخ ثبت را تازه می‌کند
+  const featured = sql`(${ads.featuredUntil} is not null and ${ads.featuredUntil} > now())`;
+  const fresh = sql`coalesce(${ads.bumpedAt}, ${ads.createdAt})`;
+  const order = [
+    desc(featured),
+    ...{
+      best: [desc(trustExpr), desc(fresh)],
+      new: [desc(fresh)],
+      rating: [desc(profiles.ratingAvg), desc(fresh)],
+      exp: [desc(profiles.doneCount), desc(fresh)],
+    }[q.sort],
+  ];
 
   const rows = await db
     .select({ ad: ads, author: { ...authorCols, kyc: users.kycStatus } })
