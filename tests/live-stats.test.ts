@@ -27,6 +27,25 @@ describe('real admin dashboard: online, visits, events, funnel; helpful answers'
     expect(snap.body.stats.visits.total.visitors).toBeGreaterThanOrEqual(2);
   });
 
+  it('signups by Tehran day: complete vs half-done, without sample accounts', async () => {
+    const o = await registered('general');
+    await db.update(users).set({ isAdmin: true }).where(eq(users.id, o.profile.userId));
+    const p0 = (await api().get('/api/admin/panel/live').set(auth(o.token))).body.people;
+    // فقط کد پیامکی (بدون نقش) = نیمه‌کاره
+    const half = await db.insert(users).values({ phone: '09127770002' }).returning();
+    await db.insert(users).values({ phone: '09000001234' }); // حساب نمونه شمرده نمی‌شود
+    const p = (await api().get('/api/admin/panel/live').set(auth(o.token))).body.people;
+    expect(p.today).toBe(p0.today + 1);
+    expect(p.todayDone).toBe(p0.todayDone);
+    expect(p.total - p.totalDone).toBe(p0.total - p0.totalDone + 1);
+    expect(p.daily).toHaveLength(30);
+    expect(p.daily[29].n).toBe(p.today);
+    expect(p.week).toBeGreaterThanOrEqual(p.today);
+    const snap = await api().get('/api/admin/panel/snapshot').set(auth(o.token));
+    expect(snap.body.stats.people.today).toBe(p.today);
+    expect(half[0].id).toBeTruthy();
+  });
+
   it('first like on an expert answer raises trust by 1 (max 5) and notifies', async () => {
     const g = await registered('general');
     const e = await registered('engineer');

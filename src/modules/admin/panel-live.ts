@@ -10,6 +10,8 @@ import { adResponses, ads, contracts, conversations, disputes, kycRequests, prof
 import { ah } from '../../lib/http';
 import { perm, type AdminCtx } from '../../middlewares/auth';
 import { onlineNow, visitStats } from '../../lib/presence';
+import { tehranDay } from '../../lib/dates';
+import { SAMPLE_PREFIX } from '../../lib/samples';
 
 const ROLE_FA: Record<string, string> = { worker: 'کارگر', specialist: 'متخصص', engineer: 'مهندس', contractor: 'پیمانکار', company: 'شرکت ساختمانی', general: 'کارفرما' };
 const TYPE_FA: Record<string, string> = { work: 'آمادهٔ همکاری', job: 'نیاز به نیرو', consult: 'پرسش تخصصی' };
@@ -66,6 +68,35 @@ export async function adFunnel() {
   return { views: v.n, responses: r.n, chats: c.n, deals: d.n, signed: s.n };
 }
 
+/**
+ * ثبت‌نام‌ها به روز تهران (نه UTC) و فقط کاربران واقعی (بدون حساب‌های نمونهٔ 0900000…)
+ * «کامل» = دست‌کم یک نقش ساخته؛ بقیه فقط کد پیامکی را زده‌اند و فرم را نیمه رها کرده‌اند
+ */
+export async function peopleStats() {
+  const today = tehranDay(), from30 = tehranDay(-29);
+  const real = sql`u.status <> 'deleted' and u.phone not like ${SAMPLE_PREFIX + '%'}`;
+  const { rows } = await db.execute<{ today: number; today_done: number; yesterday: number; week: number; month: number; total: number; total_done: number }>(sql`
+    with x as (
+      select (u.created_at at time zone 'Asia/Tehran')::date d, exists (select 1 from profiles p where p.user_id = u.id) done
+      from users u where ${real}
+    )
+    select count(*) filter (where d = ${today}::date)::int as today,
+      count(*) filter (where d = ${today}::date and done)::int as today_done,
+      count(*) filter (where d = ${today}::date - 1)::int as yesterday,
+      count(*) filter (where d > ${today}::date - 7)::int as week,
+      count(*) filter (where d > ${today}::date - 30)::int as month,
+      count(*)::int as total,
+      count(*) filter (where done)::int as total_done
+    from x`);
+  const { rows: daily } = await db.execute<{ d: string; n: number }>(sql`
+    select to_char(g.d, 'YYYY-MM-DD') d, count(u.id)::int n
+    from generate_series(${from30}::date, ${today}::date, interval '1 day') g(d)
+    left join users u on (u.created_at at time zone 'Asia/Tehran')::date = g.d::date and ${real}
+    group by g.d order by g.d`);
+  const p = rows[0];
+  return { today: p.today, todayDone: p.today_done, yesterday: p.yesterday, week: p.week, month: p.month, total: p.total, totalDone: p.total_done, daily };
+}
+
 export async function onlineStats() {
   const p = onlineNow();
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(users).where(gte(users.lastSeenAt, new Date(Date.now() - 5 * 60_000)));
@@ -77,8 +108,8 @@ export function registerLiveRoutes(r: Router) {
     '/live',
     perm('dash', 1),
     ah(async (req, res) => {
-      const [events, visits, online] = await Promise.all([recentEvents(req.admin!), visitStats(), onlineStats()]);
-      res.json({ at: new Date(), online, visits, events });
+      const [events, visits, online, people] = await Promise.all([recentEvents(req.admin!), visitStats(), onlineStats(), peopleStats()]);
+      res.json({ at: new Date(), online, visits, people, events });
     }),
   );
 }

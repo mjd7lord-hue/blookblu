@@ -42,7 +42,7 @@ import { recomputeTrust } from '../trust/strikes';
 import { adminLog } from './admin.service';
 import { ARB_FIELDS, type ArbField } from '../arbitration/fees';
 import { arbiterBalances, moreSections } from './panel-more';
-import { adFunnel, onlineStats, recentEvents } from './panel-live';
+import { adFunnel, onlineStats, peopleStats, recentEvents } from './panel-live';
 import { visitStats } from '../../lib/presence';
 
 const r = Router();
@@ -294,7 +294,7 @@ async function statsSection(a: AdminCtx) {
     return rows.map((r) => r.n);
   };
   const scope = a.provinces.length ? inArray(profiles.province, a.provinces) : undefined;
-  const [funnel, visits, online, events] = await Promise.all([adFunnel(), visitStats(), onlineStats(), recentEvents(a)]);
+  const [funnel, visits, online, events, people] = await Promise.all([adFunnel(), visitStats(), onlineStats(), recentEvents(a), peopleStats()]);
   const [signups, adsDaily, dealsDaily, byRole, byProv, byType, [convToday], [pend], [escrow]] = await Promise.all([
     series('users'),
     series('ads'),
@@ -330,6 +330,7 @@ async function statsSection(a: AdminCtx) {
     onlineNow: online.now,
     online,
     visits,
+    people,
     funnel,
     events,
     conversationsToday: convToday.n,

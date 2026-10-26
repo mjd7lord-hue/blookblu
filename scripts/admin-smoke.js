@@ -99,8 +99,8 @@ async function user(phone, role, data) {
   // داشبورد واقعی: بازدید، قیف، رویدادها
   await fetch(API + '/api/app/ping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ v: 'smoke' + Date.now(), view: true }) });
   await W.ADMIN_LIVE.reload(); ev("go('dash')");
-  await until(() => $('vis39') && $('page').textContent.includes('اعلام آمادگی / پاسخ') && $('feed') && /ثبت‌نام کرد/.test($('feed').textContent), 'real dashboard');
-  log('داشبورد واقعی: بازدید امروز', $('vis39').querySelectorAll('.kpirow b')[1].textContent, '· رویداد:', $('feed').querySelector('.t').textContent.slice(0, 50));
+  await until(() => $('hero50') && W.document.querySelectorAll('#page .hcard').length === 1 && $('page').textContent.includes('اعلام آمادگی / پاسخ') && $('feed') && /ثبت‌نام کرد/.test($('feed').textContent), 'real dashboard');
+  log('داشبورد واقعی (یک کارت):', $('hero50').querySelector('h2').textContent, '· بازدید امروز', $('hero50').querySelectorAll('.h50box')[1].querySelectorAll('b')[1].textContent, '· رویداد:', $('feed').querySelector('.t').textContent.slice(0, 50));
 
   // احراز هویت: تأیید مدرک کارگر
   const wid = w.profile.userId;

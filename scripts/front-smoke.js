@@ -240,6 +240,12 @@ async function register(w, role, data) {
   const tile = B.document.getElementById('tlOut').textContent;
   if (!/۴۲ عدد/.test(tile)) throw new Error('محاسبهٔ کاشی اشتباه است: ' + tile);
   ev(B, 'closeSheet()');
+  // دور ۵۰: شماره فقط ۱۱ رقم؛ +98 و بدون صفر به ۰۹… تبدیل می‌شود
+  const ph = (v) => ev(B, `(()=>{const el=document.createElement('input');el.value='${v}';const r0=S.reg;S.reg={...r0};phIn(el);const out=[el.value,S.reg.phOk];S.reg=r0;return out.join('|')})()`);
+  for (const [v, want] of [['+989121234567', '09121234567|true'], ['۰۹۱۲۱۲۳۴۵۶۷۸۹', '09121234567|true'], ['9121234567', '09121234567|true'], ['0912', '0912|false']]) {
+    if (ph(v) !== want) throw new Error(`شماره «${v}» ← ${ph(v)} (باید ${want})`);
+  }
+  log('ورود شماره: فقط ۱۱ رقم، +98 و بدون صفر درست تبدیل می‌شود');
   log('ابزارک‌ها: بتن ۵×۴×۱۰ ← ۱۵ کیسه سیمان؛ کاشی ۶۰×۶۰ برای ۴×۳٫۵ متر ← ۴۲ عدد');
   // پرداخت: فقط کارفرما ثبت می‌کند؛ مجری دریافت را تأیید می‌کند
   if (B.document.querySelector('#s-pdet .sec-head button[onclick^="addPay"]')) throw new Error('مجری نباید دکمهٔ «ثبت پرداخت» ببیند');
