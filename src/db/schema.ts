@@ -65,6 +65,9 @@ export const users = pgTable('users', {
   // ترجیحات اعلان و نمایش
   prefs: jsonb('prefs').$type<UserPrefs>().notNull().default(sql`'{}'::jsonb`),
   lastSeenAt: ts('last_seen_at'),
+  // دور ۵۴: با لینک دعوت چه کسی آمده (فقط یک بار، هنگام ثبت‌نام؛ دعوت از خود پذیرفته نمی‌شود)
+  invitedBy: uuid('invited_by'),
+  invitedAt: ts('invited_at'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -1339,4 +1342,28 @@ export const gatewayPayments = pgTable(
     index('gateway_payments_user_idx').on(t.userId, t.createdAt),
     index('gateway_payments_target_idx').on(t.purpose, t.targetId),
   ],
+);
+
+/* ---------- کمپین «۱۰۰ عضو بنیان‌گذار» (دور ۵۴) ---------- */
+
+/**
+ * هر کاربری که وارد کمپین شده یک ردیف: زمان «فالو کردم»، و اگر هر ۳ مرحله کامل شد شمارهٔ بنیان‌گذار.
+ * شماره یکتاست (ایندکس یکتا + اختصاص در تراکنش با قفل)؛ لغو دستی = number و assignedAt خالی.
+ */
+export const founders = pgTable(
+  'founders',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    followedAt: ts('followed_at'),
+    number: smallint('number'),
+    assignedAt: ts('assigned_at'),
+    commissionFreeUntil: ts('commission_free_until'), // ۲ سال معافیت از کمیسیون از تاریخ اختصاص
+    manual: boolean('manual').notNull().default(false), // اعطای دستی مدیر
+    revokedAt: ts('revoked_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('founders_number_uq').on(t.number)],
 );

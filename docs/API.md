@@ -642,3 +642,15 @@ snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, 
 | GET | `/pay/mine` (ورود) | — | ۵۰ پرداخت آخر من |
 
 اثر پرداخت: داوری ← `paymentStatus=paid`، `status=matching` و پیشنهاد به حل‌کننده (مثل `confirm-payment` ادمین) · ویژه ← `ads.featured_until` +۷ روز (اول کاوش) · فوری ← `urgent_until` +۲۴ ساعت · نردبان ← `bumped_at` (ترتیب). پرداخت pending بعد از ۳۰ دقیقه `expired`. پرداخت موفقی که اثرش قبلاً انجام شده بود `failReason` «بازگشت وجه لازم است» می‌گیرد و در تراکنش‌های پنل دیده می‌شود.
+
+## کمپین «۱۰۰ عضو بنیان‌گذار» (دور ۵۴) — `/api/founders`
+
+| روش | مسیر | توضیح |
+|---|---|---|
+| GET | `/founders` (ورود اختیاری) | `{ on, open, cap, taken, left, perks, igUrl, me? }` — `me`: `{ steps: { follow, kyc, invite }, done, followedAt, invites, kycStatus, number, assignedAt, commissionFreeUntil, revoked, inviteCode }`؛ با هر بار خواندن اگر ۳ قدم کامل باشد شماره داده می‌شود |
+| POST | `/founders/follow` (ورود) | قدم ۱ (بدون بررسی؛ زمان اولین کلیک ذخیره می‌شود) ← همان وضعیت |
+| GET | `/admin/panel/founders` (users:1) | `{ stats: { users, follow, kyc, invite, done, all3, cap, on, left, conversion }, items: [{ id, phone, name, role, city, province, code, steps, followedAt, kycStatus, invites, number, assignedAt, commissionFreeUntil, manual, revokedAt, inviter }] }` |
+| POST | `/admin/panel/founders/:userId/grant` · `/revoke` (users:2) | اعطای دستی (کوچک‌ترین شمارهٔ آزاد؛ `FOUNDERS_FULL`) · لغو (`NOT_FOUNDER`؛ خودکار دوباره داده نمی‌شود) |
+| PUT | `/admin/panel/config/founders` (users:2) | `{ value: { on, cap, perks[], igUrl } }` |
+
+دعوت: لینک `blooko.ir/i/<کد پروفایل>` ← اپ `?i=` ← فیلد «معرف» ثبت‌نام اول (`data.ref`) ← `users.invited_by` (یک بار، نه از خود) + درخواست قیم برای دعوت‌کننده. پروفایل عمومی: `profile.founder` (شماره یا null).

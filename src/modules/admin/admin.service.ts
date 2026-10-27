@@ -16,6 +16,7 @@ import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
 import { toLatinDigits } from '../../lib/text';
 import { fileUrl, purgeFiles } from '../files/files.service';
 import { notify } from '../notifications/notify';
+import { checkFounder } from '../founders/founders.service';
 import { applyVerifiedName, duplicateIdentity } from '../kyc/kyc.service';
 
 type User = typeof users.$inferSelect;
@@ -141,6 +142,8 @@ export async function approveKyc(admin: User, id: string, input: { firstName?: s
     body: 'مهر «هویت تأیید شد» روی شناسنامهٔ کاری‌ات خورد و ۱۰ امتیاز اعتبار گرفتی.',
     link: { screen: 'trust' },
   });
+  // مرحلهٔ ۲ کمپین بنیان‌گذاران
+  await checkFounder(k.userId);
 }
 
 export async function rejectKyc(admin: User, id: string, reason: string) {

@@ -13,7 +13,7 @@ const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
 const FRONT = path.resolve(__dirname, '../../blookblu-front') + '/';
 let html = fs.readFileSync(FRONT + 'index.html', 'utf8');
-for (const f of ['flow.js', 'live.js', 'live-projects.js', 'live-more.js', 'work.js', 'hero46.js', 'urgent.js', 'explore.js', 'i18n-extra.js', 'trust36.js', 'real.js', 'pay.js', 'desktop.js']) html = html.replace(`<script src="${f}"></script>`, '<script>' + fs.readFileSync(FRONT + f, 'utf8') + '</script>');
+for (const f of ['flow.js', 'live.js', 'live-projects.js', 'live-more.js', 'work.js', 'hero46.js', 'urgent.js', 'explore.js', 'i18n-extra.js', 'trust36.js', 'real.js', 'pay.js', 'founders.js', 'desktop.js']) html = html.replace(`<script src="${f}"></script>`, '<script>' + fs.readFileSync(FRONT + f, 'utf8') + '</script>');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let API = '';
 function browser(store, delay) {

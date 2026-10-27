@@ -275,6 +275,7 @@ export const REG: Record<Role, Step[]> = {
       f: [
         { k: 'showPhone', t: 'toggle', label: 'نمایش شماره به نیروهایی که با آن‌ها توافق کرده‌ام' },
         { k: 'pub', t: 'toggle', label: 'پروفایل عمومی کارفرما' },
+        { k: 'ref', t: 'text', label: 'معرف (اختیاری)' },
       ],
     },
   ],

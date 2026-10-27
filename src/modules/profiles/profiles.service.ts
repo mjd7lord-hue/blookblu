@@ -24,6 +24,7 @@ import { bumpView } from '../../lib/views';
 import { lockedKeys, privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
 import { validateRoleData, type RoleData } from '../roles/validate';
 import { publicFileUrl, purgeFiles } from '../files/files.service';
+import { founderNumbers, onFirstProfile } from '../founders/founders.service';
 import { listPortfolio, profileFileIds, purgeUserFiles } from '../files/media.service';
 
 type User = typeof users.$inferSelect;
@@ -146,18 +147,20 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData,
   }
 
   let referredBy: string | null = null;
+  let inviterUserId: string | null = null;
   if (typeof d.ref === 'string') {
     const [ref] = await db
       .select({ id: profiles.id, userId: profiles.userId })
       .from(profiles)
       .where(eq(profiles.code, d.ref.toUpperCase()))
       .limit(1);
-    if (ref && ref.userId !== user.id) referredBy = ref.id;
+    if (ref && ref.userId !== user.id) { referredBy = ref.id; inviterUserId = ref.userId; }
   }
 
   const displayName = role === 'company' ? (d.cname as string) : `${firstName} ${lastName ?? ''}`.trim();
+  const [hadProfile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, user.id)).limit(1);
 
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [p] = await tx
       .insert(profiles)
       .values({
@@ -198,6 +201,9 @@ export async function createRoleProfile(user: User, role: Role, input: RoleData,
     }
     return p;
   });
+  // دور ۵۴: ثبت‌نام اول با لینک/کد دعوت ← دعوت‌کننده (یک بار)، پیشنهاد قیم، بررسی بنیان‌گذار دعوت‌کننده
+  if (!hadProfile && inviterUserId) await onFirstProfile(user, created, inviterUserId).catch(() => {});
+  return created;
 }
 
 export async function updateRoleProfile(user: User, role: Role, input: RoleData, extra: { title?: string; bio?: string }) {
@@ -392,10 +398,13 @@ export async function publicProfile(code: string, viewer?: User) {
   ]);
 
   const kycVerified = row.kyc === 'verified';
+  const founder = (await founderNumbers([p.userId])).get(p.userId) ?? null;
   return {
     id: p.id,
     code: p.code,
     role: p.role,
+    // دور ۵۴: نشان «عضو بنیان‌گذار #شماره»
+    founder,
     roleName: ROLE_INFO[p.role].name,
     name: p.displayName,
     avatarUrl: publicFileUrl(p.avatarFileId),

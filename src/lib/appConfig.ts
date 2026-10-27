@@ -137,6 +137,13 @@ export const DEFAULTS = {
     { k: 'ladder', p: 29000, on: true, d: 'آگهی یک بار به بالای فهرست برمی‌گردد' },
     { k: 'star', p: 149000, on: true, d: '۷ روز بالای کاوش' },
   ] as { k: 'urgent' | 'ladder' | 'star'; p: number; on: boolean; d?: string }[],
+  // کمپین «۱۰۰ عضو بنیان‌گذار» (دور ۵۴): روشن/خاموش، ظرفیت، متن امتیازها، پیج اینستاگرام
+  founders: {
+    on: true,
+    cap: 100,
+    perks: ['نشان «عضو بنیان‌گذار» با شمارهٔ اختصاصی روی پروفایل', '۲ سال معافیت از کمیسیون بلوک', 'اولویت در پشتیبانی و دیده شدن'],
+    igUrl: 'https://instagram.com/blooko.ir',
+  },
   // محدودیت آگهی رایگان (FREE_AD_LIMIT در اپ): تعداد آگهی کار/نیروی فعال هر کاربر
   // نیروی فوری: اعتبار درخواست (ساعت)، حداکثر گیرنده در هر درخواست، حداکثر درخواست باز هر کارفرما
   limits: { freeAds: 1, urgentHours: 3, urgentMaxSend: 30, urgentOpen: 3, guarMinDone: 3, guarMinTrust: 70, guarMinDays: 30, guarMax: 5 },
@@ -201,6 +208,7 @@ const SCHEMAS: Partial<Record<ConfigKey, z.ZodTypeAny>> = {
     guarMax: z.number().int().min(1).max(50).default(5),
   }),
   boost: z.array(z.object({ k: z.enum(['urgent', 'ladder', 'star']), p: z.number().int().min(1000).max(100_000_000), on: z.boolean(), d: z.string().max(200).optional(), n: z.string().max(40).optional() }).passthrough()).max(3),
+  founders: z.object({ on: z.boolean(), cap: z.number().int().min(1).max(10000), perks: z.array(z.string().trim().min(2).max(160)).max(8), igUrl: z.string().url().max(200) }),
   visitTypes: z.array(z.object({ n: z.string().min(2).max(80), d: z.string().max(30), p: z.number().int().min(0) })).min(1).max(20),
   whatsNew: z.object({
     on: z.boolean(),

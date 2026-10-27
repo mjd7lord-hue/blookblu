@@ -42,6 +42,7 @@ const html = fs
   .replace('<script src="trust36.js"></script>', inline('trust36.js'))
   .replace('<script src="real.js"></script>', inline('real.js'))
   .replace('<script src="pay.js"></script>', inline('pay.js'))
+  .replace('<script src="founders.js"></script>', inline('founders.js'))
   .replace('<script src="desktop.js"></script>', inline('desktop.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errors = [];
@@ -247,6 +248,14 @@ async function register(w, role, data) {
     if (ph(v) !== want) throw new Error(`شماره «${v}» ← ${ph(v)} (باید ${want})`);
   }
   log('ورود شماره: فقط ۱۱ رقم، +98 و بدون صفر درست تبدیل می‌شود');
+  // دور ۵۴: چک‌لیست «۱۰۰ عضو بنیان‌گذار» در خانه ← «فالو کردم» ← لینک دعوت با کد خود کاربر
+  ev(B, "go('home')");
+  await until(() => B.document.querySelector('#fnd54 .st') && /جا مانده/.test(B.document.getElementById('fnd54').textContent), 'founders checklist on home');
+  ev(B, 'fndFollow()');
+  await until(() => ev(B, 'FND.st && FND.st.me && FND.st.me.steps.follow'), 'follow step saved');
+  if (ev(B, 'FND.st.me.inviteCode') !== ev(B, 'LIVE.pub.code')) throw new Error('کد دعوت با کد کاربر یکی نیست');
+  if (!B.document.getElementById('fnd54').textContent.includes('blooko.ir/i/' + ev(B, 'LIVE.pub.code'))) throw new Error('لینک دعوت روی کارت نیست');
+  log('بنیان‌گذاران: چک‌لیست خانه ·', ev(B, 'FND.st.left'), 'جا مانده · قدم ۱ ثبت شد · لینک', 'blooko.ir/i/' + ev(B, 'LIVE.pub.code'));
   log('ابزارک‌ها: بتن ۵×۴×۱۰ ← ۱۵ کیسه سیمان؛ کاشی ۶۰×۶۰ برای ۴×۳٫۵ متر ← ۴۲ عدد');
   // پرداخت: فقط کارفرما ثبت می‌کند؛ مجری دریافت را تأیید می‌کند
   if (B.document.querySelector('#s-pdet .sec-head button[onclick^="addPay"]')) throw new Error('مجری نباید دکمهٔ «ثبت پرداخت» ببیند');

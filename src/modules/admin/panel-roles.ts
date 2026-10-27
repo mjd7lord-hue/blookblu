@@ -16,6 +16,7 @@ import { badRequest, conflict, notFound } from '../../lib/errors';
 import { emitTo } from '../../lib/events';
 import { perm, type AdminCtx } from '../../middlewares/auth';
 import { notify } from '../notifications/notify';
+import { checkFounder } from '../founders/founders.service';
 import { adminLog } from './admin.service';
 
 const ROLE_FA: Record<string, string> = { worker: 'کارگر', specialist: 'متخصص', engineer: 'مهندس', contractor: 'پیمانکار', company: 'شرکت ساختمانی', general: 'کارفرما' };
@@ -107,6 +108,7 @@ export function registerRoleRoutes(r: Router) {
         await adminLog(tx, req.user!, 'kyc.manual', 'user', id, b.note || 'تأیید دستی بر اساس مدرک «کارت ملی»');
       });
       await notify(id, { type: 'id', title: 'هویت شما تأیید شد', body: 'مهر «هویت تأیید شد» روی شناسنامهٔ کاری‌ات خورد و ۱۰ امتیاز اعتبار گرفتی.', link: { screen: 'trust' } });
+      await checkFounder(id);
       res.json({ ok: true });
     }),
   );
