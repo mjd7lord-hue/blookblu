@@ -1,6 +1,6 @@
 {
   "platform": "node",
-  "app": "blookblu",
+  "app": "blook-api",
   "port": 3000,
   "node": {
     "version": "22"
