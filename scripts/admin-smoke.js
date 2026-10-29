@@ -110,6 +110,13 @@ async function user(phone, role, data) {
   await until(() => $('hero50') && $('a51chart') && $('a51chart').querySelectorAll('rect.hit').length === 7, '7-day analytics');
   [...$('hero50').querySelectorAll('.seg button')].find((b) => b.textContent.includes('امروز')).click();
   log('بازهٔ ۷ روز و امروز در کارت بازدید عوض شد');
+  // دور ۵۶: گزینهٔ «بازدید و رشد» در منو ← صفحهٔ کامل؛ داشبورد جمع‌وجور (ردیف عدد + نیاز به رسیدگی)
+  if (!W.document.querySelector('.dz-strip') || !W.document.querySelector('.dz-att')) throw new Error('داشبورد جمع‌وجور ساخته نشد');
+  if (![...W.document.querySelectorAll('#side *')].some((e) => e.textContent.trim() === 'بازدید و رشد')) throw new Error('گزینهٔ «بازدید و رشد» در منو نیست');
+  ev("go('growth')");
+  await until(() => $('growth51') && /منبع ورود/.test($('growth51').textContent) && /مرورگر/.test($('growth51').textContent), 'growth page');
+  log('صفحهٔ «بازدید و رشد» از منو باز شد (منبع، دستگاه، مرورگر، مخاطبان، قیف)');
+  ev("go('dash')");
   if (!/مهمان آنلاین/.test($('hero50').textContent) || !/دیروز/.test($('hero50').textContent)) throw new Error('حضور (آنلاین/امروز/دیروز) در کارت داشبورد نیست');
   // دور ۵۴: صفحهٔ «بنیان‌گذاران» ← فهرست، آمار، اعطای دستی
   ev("go('founders')");
