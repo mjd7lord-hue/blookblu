@@ -196,12 +196,13 @@ async function register(w, role, data) {
     ev(w, "ctrSign(S.role+':0')");
     await until(() => /[۰-۹]{5}/.test(ev(w, "document.querySelector('#sb .sub').textContent")), 'sign code');
     const code = ev(w, "document.querySelector('#sb .sub b').textContent");
-    ev(w, `document.getElementById('sigC').value='${code}'`);
-    click(w, '#sb .cta');
+    // دور ۵۵: فقط کد را وارد می‌کند؛ امضا خودکار زده می‌شود (بدون لمس دکمه)
+    await until(() => ev(w, "document.getElementById('sigC') && document.getElementById('sigC').dataset.otp"), 'sign code armed');
+    ev(w, `(()=>{const x=document.getElementById('sigC');x.value='${code}';x.dispatchEvent(new Event('input',{bubbles:true}))})()`);
     await until(() => ev(w, "S.ctr[S.role+':0'].me"), 'signed');
   }
   await until(() => ev(B, "S.ctr[S.role+':0']._c.status") === 'active', 'contract active');
-  log('قرارداد با امضای پیامکی هر دو طرف فعال شد:', ev(B, "S.ctr[S.role+':0']._c.number"));
+  log('قرارداد با امضای پیامکی هر دو طرف فعال شد (امضا خودکار با ۵ رقم):', ev(B, "S.ctr[S.role+':0']._c.number"));
   const printed = await fetch(API + ev(B, "S.ctr[S.role+':0']._c.printUrl")).then((r) => r.text());
   if (!printed.includes('امضاشده و فعال')) throw new Error('نسخهٔ چاپی قرارداد درست نیست');
 
