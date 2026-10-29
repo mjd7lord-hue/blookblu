@@ -10,7 +10,7 @@ import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '../../db';
 import { founders, guarantees, profiles, users } from '../../db/schema';
 import { cfg } from '../../lib/appConfig';
-import { conflict, notFound } from '../../lib/errors';
+import { badRequest, conflict, notFound } from '../../lib/errors';
 import { logger } from '../../lib/logger';
 import { SAMPLE_PREFIX } from '../../lib/samples';
 import { notify } from '../notifications/notify';
@@ -42,15 +42,24 @@ async function stepsOf(userId: string) {
   return { ...u, steps: s, done: Number(s.follow) + Number(s.kyc) + Number(s.invite) };
 }
 
-/** کوچک‌ترین شمارهٔ آزاد را در تراکنش قفل‌دار می‌دهد؛ اگر پر است null */
-async function assign(userId: string, manual: boolean) {
+/** کوچک‌ترین شمارهٔ آزاد (یا شمارهٔ انتخابی مدیر) را در تراکنش قفل‌دار می‌دهد؛ اگر پر است null */
+async function assign(userId: string, manual: boolean, wanted?: number) {
   const cap = conf().cap;
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${LOCK})`);
     const [f] = await tx.select().from(founders).where(eq(founders.userId, userId)).limit(1);
     if (f?.number) return { number: f.number, fresh: false };
-    const { rows } = await tx.execute<{ n: number | null }>(sql`select min(g)::int as n from generate_series(1, ${cap}) g where g not in (select number from founders where number is not null)`);
-    const n = rows[0]?.n;
+    let n: number | null | undefined;
+    if (wanted) {
+      // دور ۵۵: شمارهٔ انتخابی مدیر — داخل ظرفیت و هنوز به کسی داده نشده
+      if (wanted < 1 || wanted > cap) throw badRequest(`شماره باید بین ۱ و ${cap} باشد`, 'FOUNDER_NUMBER_RANGE');
+      const [used] = await tx.select({ id: founders.userId }).from(founders).where(eq(founders.number, wanted)).limit(1);
+      if (used) throw conflict(`شمارهٔ #${wanted} قبلاً به کس دیگری داده شده`, 'FOUNDER_NUMBER_TAKEN');
+      n = wanted;
+    } else {
+      const { rows } = await tx.execute<{ n: number | null }>(sql`select min(g)::int as n from generate_series(1, ${cap}) g where g not in (select number from founders where number is not null)`);
+      n = rows[0]?.n;
+    }
     if (!n) return null;
     const now = new Date(), until = new Date(now);
     until.setFullYear(until.getFullYear() + FREE_YEARS);
@@ -174,10 +183,12 @@ export async function adminStats() {
   return { ...r, cap: c.cap, on: c.on, left: Math.max(0, c.cap - r.done), conversion: r.users ? Math.round((r.done / r.users) * 1000) / 10 : 0 };
 }
 
-export async function adminGrant(userId: string) {
+export async function adminGrant(userId: string, wanted?: number) {
   const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
   if (!u) throw notFound('کاربر پیدا نشد');
-  const r = await assign(userId, true);
+  const [cur] = await db.select({ n: founders.number }).from(founders).where(eq(founders.userId, userId)).limit(1);
+  if (cur?.n) throw conflict(`این کاربر از قبل بنیان‌گذار #${cur.n} است؛ برای شمارهٔ دیگر اول لغو کن`, 'ALREADY_FOUNDER');
+  const r = await assign(userId, true, wanted);
   if (!r) throw conflict('ظرفیت بنیان‌گذاران پر است؛ اول ظرفیت را در تنظیمات بیشتر کن', 'FOUNDERS_FULL');
   if (r.fresh) await notify(userId, { type: 'id', title: `تبریک! تو عضو بنیان‌گذار #${r.number} بلوک شدی`, body: 'نشان بنیان‌گذار روی پروفایلت نشست.', link: { screen: 'home' } });
   return r.number;

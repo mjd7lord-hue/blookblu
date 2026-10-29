@@ -4,7 +4,7 @@
  *   GET /admin/panel/live — سبک؛ داشبورد هر ۱۵ ثانیه می‌خواند
  */
 import { Router } from 'express';
-import { and, desc, gte, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '../../db';
 import { adResponses, ads, contracts, conversations, disputes, kycRequests, profiles, projectPayments, projects, reports, strikes, urgentRequests, users } from '../../db/schema';
 import { ah } from '../../lib/http';
@@ -99,9 +99,25 @@ export async function peopleStats() {
 }
 
 /** آنلاین همین حالا — بدون مدیران و حساب‌های نمونه (و مرورگری که قبلاً با آن‌ها دیده شده) */
+/** عضو یا مهمان «امروز» و «دیروز» (به روز تهران) — بدون مدیران، نمونه‌ها و مرورگرهایی که با آن‌ها دیده شده‌اند */
+async function presenceDays() {
+  const today = tehranDay(), yesterday = tehranDay(-1);
+  const { rows } = await db.execute<{ d: string; members: number; guests: number }>(sql`
+    select v.day::text as d, count(distinct v.user_id)::int as members,
+      count(distinct v.visitor) filter (where v.user_id is null and not exists (select 1 from site_visits y where y.visitor = v.visitor and y.user_id is not null))::int as guests
+    from site_visits v
+    where v.day in (${today}::date, ${yesterday}::date)
+      and not exists (select 1 from site_visits x join users u on u.id = x.user_id where x.visitor = v.visitor and (u.is_admin or u.phone like ${SAMPLE_PREFIX + '%'}))
+    group by v.day`);
+  const pick = (d: string) => { const r = rows.find((x) => x.d === d); return { members: r?.members ?? 0, guests: r?.guests ?? 0, all: (r?.members ?? 0) + (r?.guests ?? 0) }; };
+  return { today: pick(today), yesterday: pick(yesterday) };
+}
+
+/** آنلاین همین حالا (۲ دقیقهٔ اخیر) — بدون مدیران و حساب‌های نمونه؛ با فهرست اعضای آنلاین */
 export async function onlineStats() {
+  const days = await presenceDays();
   const list = onlineEntries();
-  if (!list.length) return { now: 0, guests: 0, members: 0 };
+  if (!list.length) return { now: 0, guests: 0, members: 0, list: [], ...days };
   const vids = list.map(([v]) => v), uids = [...new Set(list.map(([, u]) => u).filter((u): u is string => !!u))];
   const { rows } = await db.execute<{ visitor: string }>(sql`
     select distinct x.visitor from site_visits x join users u on u.id = x.user_id
@@ -113,8 +129,19 @@ export async function onlineStats() {
     list.forEach(([v, u]) => { if (u && innerIds.has(u)) bad.add(v); });
   }
   const real = list.filter(([v]) => !bad.has(v));
-  const members = real.filter(([, u]) => u).length;
-  return { now: real.length, guests: real.length - members, members };
+  // یک عضو با دو دستگاه یک نفر است
+  const memberIds = [...new Set(real.map(([, u]) => u).filter((u): u is string => !!u))];
+  const guests = real.filter(([, u]) => !u).length;
+  const people = memberIds.length
+    ? await db
+        .select({ id: users.id, phone: users.phone, name: profiles.displayName, code: profiles.code, role: profiles.role, city: profiles.city })
+        .from(users)
+        .leftJoin(profiles, and(eq(profiles.userId, users.id), sql`${profiles.role} = coalesce(${users.activeRole}, ${profiles.role})`))
+        .where(inArray(users.id, memberIds))
+    : [];
+  const byId = new Map<string, (typeof people)[number]>();
+  for (const p of people) if (!byId.has(p.id)) byId.set(p.id, p);
+  return { now: memberIds.length + guests, guests, members: memberIds.length, list: [...byId.values()], ...days };
 }
 
 export function registerLiveRoutes(r: Router) {

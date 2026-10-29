@@ -19,6 +19,12 @@ describe('real admin dashboard: online, visits, events, funnel; helpful answers'
     expect(live.status).toBe(200);
     expect(live.body.online.now).toBeGreaterThanOrEqual(2);
     expect(live.body.online.members).toBeGreaterThanOrEqual(1);
+    // دور ۵۵: کدام اعضا آنلاین‌اند، و آمار امروز/دیروز
+    expect(live.body.online.list.some((x: { id: string; code: string }) => x.id === m.profile.userId && x.code === m.profile.code)).toBe(true);
+    expect(live.body.online.list.some((x: { id: string }) => x.id === o.profile.userId)).toBe(false); // مدیر شمرده نمی‌شود
+    expect(live.body.online.today.members).toBeGreaterThanOrEqual(1);
+    expect(live.body.online.today.guests).toBeGreaterThanOrEqual(1);
+    expect(live.body.online.yesterday).toMatchObject({ members: expect.any(Number), guests: expect.any(Number) });
     expect(live.body.visits.today.views).toBeGreaterThanOrEqual(3);
     expect(live.body.visits.today.visitors).toBeGreaterThanOrEqual(2);
     expect(live.body.visits.daily).toHaveLength(30);

@@ -619,7 +619,7 @@ await fetch(`${API}/api/me/roles/specialist/portfolio`, { method: 'POST', header
 | متد | مسیر | بدنه | توضیح |
 |---|---|---|---|
 | POST | `/app/ping` (ورود اختیاری) | `{ v, view?, src?, sa? }` | v = شناسهٔ تصادفی مرورگر (۸ تا ۴۰ حرف)؛ view=true یعنی یک بازدید تازه؛ src = utm_source یا سایت قبلی؛ sa = باز شده از آیکون روی گوشی. دستگاه/مرورگر از User-Agent؛ ربات‌ها ثبت نمی‌شوند. «آنلاین» = پینگ در ۲ دقیقهٔ اخیر |
-| GET | `/admin/panel/live?range=today\|7d\|30d\|all` | dash:1 | `online { now, members, guests }` (بدون مدیران و نمونه‌ها)، `visits { today, month (۳۰ روز), total, daily[30] }`، `people` (ثبت‌نام به روز تهران)، `analytics { range, from, to, cur, prev, sources, devices, os, browsers, chart }` (cur/prev: visitors, views, visits, avgSec, bounceRate, members, guests, installed, returning, newVisitors, signups, accounts, halfDone, phones, conversion؛ chart: ساعتی برای today، روزانه برای بقیه)، `events` (رخدادهای واقعی ۷ روز اخیر) |
+| GET | `/admin/panel/live?range=today\|7d\|30d\|all` | dash:1 | `online { now, members, guests, list: [{ id, name, code, role, city, phone }], today: { all, members, guests }, yesterday: {…} }` (بدون مدیران و نمونه‌ها؛ list = اعضای آنلاین ۲ دقیقهٔ اخیر)، `visits { today, month (۳۰ روز), total, daily[30] }`، `people` (ثبت‌نام به روز تهران)، `analytics { range, from, to, cur, prev, sources, devices, os, browsers, chart }` (cur/prev: visitors, views, visits, avgSec, bounceRate, members, guests, installed, returning, newVisitors, signups, accounts, halfDone, phones, conversion؛ chart: ساعتی برای today، روزانه برای بقیه)، `events` (رخدادهای واقعی ۷ روز اخیر) |
 
 snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, signed }, events` دارد. پاسخ تخصصی با دست‌کم یک «مفید بود» = +۱ در `trust_adj` (تا ۵) و اعلان برای پاسخ‌دهنده.
 
@@ -650,7 +650,7 @@ snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, 
 | GET | `/founders` (ورود اختیاری) | `{ on, open, cap, taken, left, perks, igUrl, me? }` — `me`: `{ steps: { follow, kyc, invite }, done, followedAt, invites, kycStatus, number, assignedAt, commissionFreeUntil, revoked, inviteCode }`؛ با هر بار خواندن اگر ۳ قدم کامل باشد شماره داده می‌شود |
 | POST | `/founders/follow` (ورود) | قدم ۱ (بدون بررسی؛ زمان اولین کلیک ذخیره می‌شود) ← همان وضعیت |
 | GET | `/admin/panel/founders` (users:1) | `{ stats: { users, follow, kyc, invite, done, all3, cap, on, left, conversion }, items: [{ id, phone, name, role, city, province, code, steps, followedAt, kycStatus, invites, number, assignedAt, commissionFreeUntil, manual, revokedAt, inviter }] }` |
-| POST | `/admin/panel/founders/:userId/grant` · `/revoke` (users:2) | اعطای دستی (کوچک‌ترین شمارهٔ آزاد؛ `FOUNDERS_FULL`) · لغو (`NOT_FOUNDER`؛ خودکار دوباره داده نمی‌شود) |
+| POST | `/admin/panel/founders/:userId/grant` · `/revoke` (users:2) | اعطای دستی `{ number? }` (شمارهٔ انتخابی مدیر، یا کوچک‌ترین شمارهٔ آزاد؛ `FOUNDER_NUMBER_TAKEN`، `FOUNDER_NUMBER_RANGE`، `ALREADY_FOUNDER`، `FOUNDERS_FULL`) · لغو (`NOT_FOUNDER`؛ خودکار دوباره داده نمی‌شود) |
 | PUT | `/admin/panel/config/founders` (users:2) | `{ value: { on, cap, perks[], igUrl } }` |
 
 دعوت: لینک `blooko.ir/i/<کد پروفایل>` ← اپ `?i=` ← فیلد «معرف» ثبت‌نام اول (`data.ref`) ← `users.invited_by` (یک بار، نه از خود) + درخواست قیم برای دعوت‌کننده. پروفایل عمومی: `profile.founder` (شماره یا null).

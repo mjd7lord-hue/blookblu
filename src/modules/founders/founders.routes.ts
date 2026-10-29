@@ -5,6 +5,7 @@
  *        تنظیمات (روشن/خاموش، ظرفیت، متن امتیازها) = PUT /api/admin/panel/config/founders
  */
 import { Router } from 'express';
+import { z } from 'zod';
 import { db } from '../../db';
 import { ah, parse, uuidParam } from '../../lib/http';
 import { optionalAuth, perm, requireAuth } from '../../middlewares/auth';
@@ -30,7 +31,9 @@ export function registerFounderAdminRoutes(a: Router) {
     perm('users', 2),
     ah(async (req, res) => {
       const { id } = parse(uuidParam, req.params);
-      const number = await svc.adminGrant(id);
+      // شمارهٔ دلخواه مدیر (اختیاری)؛ بدون آن کوچک‌ترین شمارهٔ آزاد
+      const { number: wanted } = parse(z.object({ number: z.coerce.number().int().min(1).max(10000).optional() }), req.body ?? {});
+      const number = await svc.adminGrant(id, wanted);
       await adminLog(db, req.user!, 'founder.grant', 'user', id, `#${number}`);
       res.json({ number });
     }),

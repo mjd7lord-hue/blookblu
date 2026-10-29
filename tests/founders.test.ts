@@ -81,6 +81,17 @@ describe('founders campaign (round 54)', () => {
     const gr = await api().post(`/api/admin/panel/founders/${b.profile.userId}/grant`).set(auth(adm.token));
     expect(gr.body.number).toBeGreaterThanOrEqual(1);
     expect((await db.select().from(founders).where(eq(founders.userId, b.profile.userId)))[0].manual).toBe(true);
+    // دور ۵۵: مدیر شماره را خودش انتخاب می‌کند؛ شمارهٔ داده‌شده دوباره قابل انتخاب نیست
+    const used = new Set((await db.select({ n: founders.number }).from(founders)).map((x) => x.n));
+    let pick = 1; while (used.has(pick)) pick++;
+    const c1 = await registered('worker'), c2 = await registered('worker');
+    const g1 = await api().post(`/api/admin/panel/founders/${c1.profile.userId}/grant`).set(auth(adm.token)).send({ number: pick });
+    expect(g1.body.number).toBe(pick);
+    const g2 = await api().post(`/api/admin/panel/founders/${c2.profile.userId}/grant`).set(auth(adm.token)).send({ number: pick });
+    expect(g2.body.error.code).toBe('FOUNDER_NUMBER_TAKEN');
+    expect((await api().post(`/api/admin/panel/founders/${c2.profile.userId}/grant`).set(auth(adm.token)).send({ number: 101 })).body.error.code).toBe('FOUNDER_NUMBER_RANGE');
+    expect((await api().post(`/api/admin/panel/founders/${c1.profile.userId}/grant`).set(auth(adm.token)).send({ number: 1 })).body.error.code).toBe('ALREADY_FOUNDER');
+    expect((await api().get(`/api/profiles/${c1.profile.code}`)).body.profile.founder).toBe(pick);
     const w = await registered('worker');
     expect((await api().get('/api/admin/panel/founders').set(auth(w.token))).status).toBe(403);
   });

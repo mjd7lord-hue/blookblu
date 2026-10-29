@@ -110,14 +110,19 @@ async function user(phone, role, data) {
   await until(() => $('hero50') && $('a51chart') && $('a51chart').querySelectorAll('rect.hit').length === 7, '7-day analytics');
   [...$('hero50').querySelectorAll('.seg button')].find((b) => b.textContent.includes('امروز')).click();
   log('بازهٔ ۷ روز و امروز در کارت بازدید عوض شد');
+  if (!/مهمان آنلاین/.test($('hero50').textContent) || !/دیروز/.test($('hero50').textContent)) throw new Error('حضور (آنلاین/امروز/دیروز) در کارت داشبورد نیست');
   // دور ۵۴: صفحهٔ «بنیان‌گذاران» ← فهرست، آمار، اعطای دستی
   ev("go('founders')");
   await until(() => W.FND54.items && $('page').querySelector('table') && /بنیان‌گذار شده/.test($('page').textContent), 'founders page');
   const fid = W.FND54.items.find((x) => !x.number).id;
-  await ev(`ADMIN_LIVE.api('POST','/admin/panel/founders/${fid}/grant')`);
-  ev("go('founders')");
-  await until(() => W.FND54.items.find((x) => x.id === fid && x.number), 'founder granted');
-  log('بنیان‌گذاران: فهرست', W.FND54.items.length, 'نفر · اعطای دستی #' + W.FND54.items.find((x) => x.id === fid).number);
+  // دور ۵۵: پنجرهٔ اعطا ← مدیر شماره را انتخاب می‌کند (شمارهٔ گرفته‌شده غیرفعال است)
+  ev(`fndGrant('${fid}')`);
+  await until(() => $('fgN') && $('fgGrid').querySelector('button[disabled]'), 'grant number picker');
+  const want = (() => { const used = new Set(W.FND54.items.map((x) => x.number).filter(Boolean)); let n = 60; while (used.has(n)) n++; return n; })();
+  ev(`(()=>{const i=document.getElementById('fgN');i.value=${want};i.dispatchEvent(new Event('input'))})()`);
+  $('fgGo').click();
+  await until(() => W.FND54.items.find((x) => x.id === fid && x.number === want), 'founder granted with chosen number');
+  log('بنیان‌گذاران: فهرست', W.FND54.items.length, 'نفر · اعطای دستی با شمارهٔ انتخابی #' + W.FND54.items.find((x) => x.id === fid).number);
 
   // احراز هویت: تأیید مدرک کارگر
   const wid = w.profile.userId;
