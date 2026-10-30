@@ -50,6 +50,10 @@ describe('founders campaign (round 54)', () => {
     const years = (new Date(s3.commissionFreeUntil).getTime() - new Date(s3.assignedAt).getTime()) / (365 * 86400_000);
     expect(years).toBeGreaterThan(1.99);
     expect(years).toBeLessThan(2.01);
+    // دور ۵۷: بنیان‌گذار بدون عکس و معرفی ← پیام تکمیل پروفایل
+    expect(s3.profile).toMatchObject({ photo: false, complete: false });
+    const nf = await api().get('/api/notifications').set(auth(a.token));
+    expect(nf.body.items.some((x: { title: string; link: { screen: string } | null }) => x.title.includes('پروفایلت را کامل کن') && x.link?.screen === 'edit')).toBe(true);
     // دعوت‌کننده = پیشنهاد قیم دوست (با تأیید پیامکی خودش)
     const [g] = await db.select().from(guarantees).where(eq(guarantees.profileId, b.profile.id));
     expect(g).toMatchObject({ guarantorUserId: a.profile.userId, status: 'pending' });

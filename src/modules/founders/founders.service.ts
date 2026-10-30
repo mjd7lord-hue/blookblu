@@ -82,12 +82,38 @@ export async function checkFounder(userId: string) {
     if (r?.fresh) {
       logger.info({ userId, number: r.number }, 'founder assigned');
       await notify(userId, { type: 'id', title: `تبریک! تو عضو بنیان‌گذار #${r.number} بلوک شدی`, body: 'نشان بنیان‌گذار روی پروفایلت نشست و ۲ سال از کمیسیون بلوک معافی.', link: { screen: 'home' } });
+      await nudgeProfile(userId);
     }
     return r?.number ?? null;
   } catch (err) {
     logger.error({ err, userId }, 'founder check failed');
     return null;
   }
+}
+
+/** پروفایل نقش فعال کامل است؟ (عکس، معرفی کوتاه) */
+async function profileGaps(userId: string) {
+  const [p] = await db
+    .select({ avatar: profiles.avatarFileId, bio: profiles.bio })
+    .from(profiles)
+    .innerJoin(users, eq(users.id, profiles.userId))
+    .where(and(eq(profiles.userId, userId), sql`${profiles.role} = coalesce(${users.activeRole}, ${profiles.role})`))
+    .limit(1);
+  const photo = !!p?.avatar, bio = !!(p?.bio && p.bio.trim().length >= 10);
+  return { photo, bio, complete: photo && bio };
+}
+
+/** دور ۵۷: پیام به بنیان‌گذار تازه برای تکمیل پروفایل و گذاشتن عکس */
+export async function nudgeProfile(userId: string) {
+  const g = await profileGaps(userId);
+  if (g.complete) return;
+  const need = [!g.photo && 'عکس پروفایل', !g.bio && 'معرفی کوتاه'].filter(Boolean).join(' و ');
+  await notify(userId, {
+    type: 'id',
+    title: 'بنیان‌گذار عزیز، پروفایلت را کامل کن',
+    body: `${need} را بگذار تا نشان بنیان‌گذار کنار یک پروفایل کامل دیده شود و کارفرماها راحت‌تر به تو اعتماد کنند.`,
+    link: { screen: 'edit' },
+  });
 }
 
 /** وضعیت کمپین (و اگر کاربر وارد شده، مرحله‌های خودش) */
@@ -99,10 +125,13 @@ export async function status(user?: User) {
   await checkFounder(user.id);
   const s = await stepsOf(user.id);
   const [p] = await db.select({ code: profiles.code }).from(profiles).where(eq(profiles.userId, user.id)).orderBy(profiles.createdAt).limit(1);
+  const pr = s.number ? await profileGaps(user.id) : null;
   out.me = {
     steps: s.steps, done: s.done, followedAt: s.followedAt, invites: s.invites, kycStatus: s.kyc,
     number: s.number, assignedAt: s.assignedAt, commissionFreeUntil: s.until, revoked: !!s.revokedAt,
     inviteCode: p?.code ?? null,
+    // دور ۵۷: بنیان‌گذار باید پروفایلش کامل باشد (عکس و معرفی)
+    profile: pr,
   };
   return out;
 }
@@ -190,7 +219,10 @@ export async function adminGrant(userId: string, wanted?: number) {
   if (cur?.n) throw conflict(`این کاربر از قبل بنیان‌گذار #${cur.n} است؛ برای شمارهٔ دیگر اول لغو کن`, 'ALREADY_FOUNDER');
   const r = await assign(userId, true, wanted);
   if (!r) throw conflict('ظرفیت بنیان‌گذاران پر است؛ اول ظرفیت را در تنظیمات بیشتر کن', 'FOUNDERS_FULL');
-  if (r.fresh) await notify(userId, { type: 'id', title: `تبریک! تو عضو بنیان‌گذار #${r.number} بلوک شدی`, body: 'نشان بنیان‌گذار روی پروفایلت نشست.', link: { screen: 'home' } });
+  if (r.fresh) {
+    await notify(userId, { type: 'id', title: `تبریک! تو عضو بنیان‌گذار #${r.number} بلوک شدی`, body: 'نشان بنیان‌گذار روی پروفایلت نشست.', link: { screen: 'home' } });
+    await nudgeProfile(userId);
+  }
   return r.number;
 }
 
