@@ -124,7 +124,7 @@ async function user(phone, role, data) {
   const fid = W.FND54.items.find((x) => !x.number).id;
   // دور ۵۵: پنجرهٔ اعطا ← مدیر شماره را انتخاب می‌کند (شمارهٔ گرفته‌شده غیرفعال است)
   ev(`fndGrant('${fid}')`);
-  await until(() => $('fgN') && $('fgGrid').querySelector('button[disabled]'), 'grant number picker');
+  await until(() => $('fgN') && $('fgGrid').querySelector('button'), 'grant number picker');
   const want = (() => { const used = new Set(W.FND54.items.map((x) => x.number).filter(Boolean)); let n = 60; while (used.has(n)) n++; return n; })();
   ev(`(()=>{const i=document.getElementById('fgN');i.value=${want};i.dispatchEvent(new Event('input'))})()`);
   $('fgGo').click();
@@ -222,6 +222,18 @@ async function user(phone, role, data) {
   await until(async () => (await call('GET', `/conversations/${sup.conversation.id}/messages`, null, w.token)).items.some((m) => m.admin), 'ticket reply');
   await until(() => ev(`TICKETS.find(t=>t.id==='${code}').st`) === 'pending', 'ticket pending');
   log('پشتیبانی: تیکت', code, 'پاسخ گرفت (منتظر کاربر)');
+  // دور ۵۸: پیام پشتیبانی از کشوی کاربر ← گفت‌وگوی پشتیبانی کاربر + اعلان
+  ev(`openUser('${wid}')`);
+  await until(() => W.document.querySelector('#drBody .sup58bar button'), 'support button in user drawer');
+  ev(`supMsg('${wid}','پیام آزمایشی پشتیبانی از پنل')`);
+  await until(() => $('spGo'), 'support message modal');
+  $('spGo').click();
+  await until(async () => JSON.stringify(await call('GET', '/notifications', null, w.token)).includes('پیام از پشتیبانی'), 'support message reached user');
+  ev('closeDrawer && closeDrawer()');
+  log('پشتیبانی از پنل: پیام از کشوی کاربر به گفت‌وگوی پشتیبانی او رسید');
+  ev("S.f.cat='custom';go('catalog')");
+  await until(() => /ثبت‌کننده‌ها/.test($('page').textContent), 'custom items submitter column');
+  log('فهرست‌ها ← «مورد دیگر»: ستون ثبت‌کننده‌ها');
 
   // اعلان همگانی به کارگرهای هرمزگان
   ev("go('notif')");

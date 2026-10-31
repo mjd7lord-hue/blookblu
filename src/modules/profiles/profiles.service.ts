@@ -25,6 +25,7 @@ import { lockedKeys, privateKeys, RANGE_OPTS, ROLE_INFO } from '../roles/forms';
 import { validateRoleData, type RoleData } from '../roles/validate';
 import { publicFileUrl, purgeFiles } from '../files/files.service';
 import { founderNumbers, onFirstProfile } from '../founders/founders.service';
+import { INVITE, invitesOf } from '../trust/strikes';
 import { listPortfolio, profileFileIds, purgeUserFiles } from '../files/media.service';
 
 type User = typeof users.$inferSelect;
@@ -399,12 +400,16 @@ export async function publicProfile(code: string, viewer?: User) {
 
   const kycVerified = row.kyc === 'verified';
   const founder = (await founderNumbers([p.userId])).get(p.userId) ?? null;
+  const [{ invites }] = (await db.execute<{ invites: number }>(sql`select ${invitesOf(sql`${p.userId}::uuid`)}::int as invites`)).rows;
   return {
     id: p.id,
     code: p.code,
     role: p.role,
     // دور ۵۴: نشان «عضو بنیان‌گذار #شماره»
     founder,
+    // دور ۵۸: دعوت‌های موفق و نشان «سفیر بلوک» (۱۰+ دعوت)
+    invites,
+    ambassador: invites >= INVITE.ambassadorAt,
     roleName: ROLE_INFO[p.role].name,
     name: p.displayName,
     avatarUrl: publicFileUrl(p.avatarFileId),

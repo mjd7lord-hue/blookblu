@@ -48,7 +48,7 @@ import { registerFounderAdminRoutes } from '../founders/founders.routes';
 import { registerRoleRoutes, roleRequestsSection, strikesSection, urgentSection } from './panel-roles';
 import { fileUrl } from '../files/files.service';
 import { notify } from '../notifications/notify';
-import { postMessage } from '../chat/chat.service';
+import { postMessage, supportConversation } from '../chat/chat.service';
 import { allFields } from '../roles/forms';
 import { adminPayments } from '../pay/pay.service';
 import { adminLog } from './admin.service';
@@ -303,6 +303,45 @@ r.post(
   }),
 );
 
+/**
+ * دور ۵۸: مدیر از داخل پنل به هر کاربری پیام پشتیبانی می‌دهد (مثلاً دربارهٔ «مورد دیگر» یا مدرک)
+ * گفت‌وگوی پشتیبانی همان کاربر پیدا یا ساخته می‌شود، پیام مدیر می‌رود و تیکت در «پشتیبانی» دیده می‌شود.
+ */
+r.post(
+  '/users/:id/support',
+  perm('support', 2),
+  ah(async (req, res) => {
+    const { id } = parse(uuidParam, req.params);
+    const body = parse(textBody.extend({ subject: z.string().trim().min(2).max(160).optional() }), req.body);
+    const [u] = await db.select().from(users).where(and(eq(users.id, id), userInScope(req.admin!, '"users"."id"'))).limit(1);
+    if (!u || u.status === 'deleted') throw notFound('کاربر پیدا نشد');
+    const [p] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.userId, id))
+      .orderBy(sql`(${profiles.role} = ${u.activeRole ?? 'worker'}) desc`, profiles.createdAt)
+      .limit(1);
+    if (!p) throw badRequest('این کاربر هنوز ثبت‌نام را کامل نکرده؛ گفت‌وگوی پشتیبانی ندارد', 'NO_PROFILE');
+    const conv = await supportConversation(p);
+    const [tk] = await db.select().from(supportTickets).where(eq(supportTickets.conversationId, conv.id)).limit(1);
+    const m = await adminSay(req, conv.id, body.text);
+    const [nt] = await db
+      .update(supportTickets)
+      .set({
+        subject: tk.subject ?? body.subject ?? 'پیام از پشتیبانی بلوک',
+        status: 'pending',
+        assigneeAdminId: tk.assigneeAdminId ?? req.admin!.id,
+        firstReplyAt: tk.firstReplyAt ?? new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(supportTickets.id, tk.id))
+      .returning();
+    await notify(id, { type: 'msg', title: 'پیام از پشتیبانی بلوک', body: body.text.slice(0, 140), link: { screen: 'chat', id: conv.id } });
+    await adminLog(db, req.user!, 'support.message', 'user', id, `T-${1000 + nt.no} · ${body.text.slice(0, 160)}`);
+    res.status(201).json({ ticketId: nt.id, code: 'T-' + (1000 + nt.no), conversationId: conv.id, message: m });
+  }),
+);
+
 /* ================= اعلان همگانی ================= */
 
 const audience = z.object({
@@ -435,9 +474,16 @@ const customKey = (role: string, field: string, value: string) => `${role}.${fie
 
 async function customSection() {
   const decided = cfg('catalog').custom ?? {};
-  const out: { role: Role; field: string; label: string; value: string; count: number; status: string; to?: string }[] = [];
-  const ps = await db.select({ role: profiles.role, data: profiles.data }).from(profiles);
+  // دور ۵۸: ثبت‌کننده‌های هر «مورد دیگر» (برای پیام پشتیبانی وقتی منظورشان روشن نیست)
+  type Who = { userId: string; name: string; code: string; phone: string };
+  const out: { role: Role; field: string; label: string; value: string; count: number; status: string; to?: string; users: Who[] }[] = [];
+  const ps = await db
+    .select({ role: profiles.role, data: profiles.data, userId: profiles.userId, name: profiles.displayName, code: profiles.code, phone: users.phone })
+    .from(profiles)
+    .innerJoin(users, eq(users.id, profiles.userId))
+    .where(ne(users.status, 'deleted'));
   const counts = new Map<string, number>();
+  const who = new Map<string, Who[]>();
   for (const p of ps) {
     for (const f of allFields(p.role).filter((x) => x.custom && x.opts)) {
       const raw = (p.data as Record<string, unknown>)[f.k];
@@ -445,6 +491,9 @@ async function customSection() {
         if (typeof v !== 'string' || f.opts!.includes(v)) continue;
         const k = customKey(p.role, f.k, v);
         counts.set(k, (counts.get(k) ?? 0) + 1);
+        const list = who.get(k) ?? [];
+        if (list.length < 30 && !list.some((x) => x.userId === p.userId)) list.push({ userId: p.userId, name: p.name, code: p.code, phone: p.phone });
+        who.set(k, list);
       }
     }
   }
@@ -453,7 +502,7 @@ async function customSection() {
     const [role, field] = head.split('.') as [Role, string];
     const d = decided[k];
     const f = allFields(role).find((x) => x.k === field)!;
-    out.push({ role, field, label: f.label, value, count, status: !d ? 'wait' : typeof d === 'object' ? 'merge' : d, to: typeof d === 'object' ? d.to : undefined });
+    out.push({ role, field, label: f.label, value, count, status: !d ? 'wait' : typeof d === 'object' ? 'merge' : d, to: typeof d === 'object' ? d.to : undefined, users: who.get(k) ?? [] });
   }
   return out.sort((a, b) => b.count - a.count).slice(0, 500);
 }

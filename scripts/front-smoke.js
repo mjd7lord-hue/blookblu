@@ -477,6 +477,12 @@ async function register(w, role, data) {
   await until(async () => { const t = await ev(A, "LIVE.api('GET','/me/team')"); return t.items[0].days[t.today] === ev(A, 'S.today[0]') && ev(A, 'S.today[0]') !== 'p'; }, 'attendance saved');
   log('تیم و حضور: نیرو اضافه شد، حضور امروز', ev(A, 'TST[S.today[0]][0]'), '· دستمزد روزانه', ev(A, 'S.team[0].w'));
 
+  // دور ۵۸: ردیف ثابت «پشتیبانی بلوک» بالای پیام‌ها ← همان گفت‌وگوی پشتیبانی
+  ev(B, "go('msg')");
+  await until(() => B.document.querySelector('#s-msg .sup58'), 'pinned support row');
+  B.document.querySelector('#s-msg .sup58').click();
+  await until(() => ev(B, "S.cur==='chat' && (S.convs.find(c=>c.id===S.cid)||{}).type==='support'"), 'support chat from pinned row');
+  log('پیام‌ها: ردیف ثابت «پشتیبانی بلوک» گفت‌وگوی پشتیبانی را باز کرد');
   ev(B, "openChat('c-support')");
   await until(() => ev(B, "S.cur==='chat' && (S.convs.find(c=>c.id===S.cid)||{}).type==='support'"), 'support chat');
   await ev(B, "LIVE.api('POST','/conversations/'+S.cid+'/messages',{kind:'text',body:'سلام، کد تأیید دیر می‌رسد'})");

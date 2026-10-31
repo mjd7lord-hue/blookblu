@@ -650,7 +650,11 @@ snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, 
 | GET | `/founders` (ورود اختیاری) | `{ on, open, cap, taken, left, perks, igUrl, me? }` — `me`: `{ steps: { follow, kyc, invite }, done, followedAt, invites, kycStatus, number, assignedAt, commissionFreeUntil, revoked, inviteCode }`؛ با هر بار خواندن اگر ۳ قدم کامل باشد شماره داده می‌شود |
 | POST | `/founders/follow` (ورود) | قدم ۱ (بدون بررسی؛ زمان اولین کلیک ذخیره می‌شود) ← همان وضعیت |
 | GET | `/admin/panel/founders` (users:1) | `{ stats: { users, follow, kyc, invite, done, all3, cap, on, left, conversion }, items: [{ id, phone, name, role, city, province, code, steps, followedAt, kycStatus, invites, number, assignedAt, commissionFreeUntil, manual, revokedAt, inviter }] }` |
+| POST | `/admin/panel/users/:userId/support` (support:2) | دور ۵۸: پیام پشتیبانی به هر کاربر `{ text, subject? }` ← گفت‌وگوی پشتیبانی او (پیدا یا ساخته) + اعلان؛ `201 { ticketId, code, conversationId }`؛ `NO_PROFILE` اگر ثبت‌نام کامل نیست. «مورد دیگر» در snapshot: `custom[].users = [{ userId, name, code, phone }]` |
 | POST | `/admin/panel/founders/:userId/grant` · `/revoke` (users:2) | اعطای دستی `{ number? }` (شمارهٔ انتخابی مدیر، یا کوچک‌ترین شمارهٔ آزاد؛ `FOUNDER_NUMBER_TAKEN`، `FOUNDER_NUMBER_RANGE`، `ALREADY_FOUNDER`، `FOUNDERS_FULL`) · لغو (`NOT_FOUNDER`؛ خودکار دوباره داده نمی‌شود) |
 | PUT | `/admin/panel/config/founders` (users:2) | `{ value: { on, cap, perks[], igUrl } }` |
 
 دعوت: لینک `blooko.ir/i/<کد پروفایل>` ← اپ `?i=` ← فیلد «معرف» ثبت‌نام اول (`data.ref`) ← `users.invited_by` (یک بار، نه از خود) + درخواست قیم برای دعوت‌کننده. پروفایل عمومی: `profile.founder` (شماره یا null).
+
+## امتیاز دعوت و «سفیر بلوک» (دور ۵۸)
+هر کاربری که با کد تو (فیلد «معرف»، لینک `blooko.ir/i/کد`) ثبت‌نام کامل کرده و حسابش فعال است = یک دعوت موفق ← `trust_adj` +۵ تا سقف ۷۵. پروفایل عمومی: `profile.invites` (تعداد دعوت موفق) و `profile.ambassador` (۱۰ دعوت یا بیشتر).

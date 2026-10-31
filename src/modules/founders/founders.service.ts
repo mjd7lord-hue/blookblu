@@ -14,6 +14,7 @@ import { badRequest, conflict, notFound } from '../../lib/errors';
 import { logger } from '../../lib/logger';
 import { SAMPLE_PREFIX } from '../../lib/samples';
 import { notify } from '../notifications/notify';
+import { INVITE, invitesOf, recomputeTrust } from '../trust/strikes';
 
 type User = typeof users.$inferSelect;
 const LOCK = 54_100; // کلید قفل تراکنشی اختصاص شماره
@@ -165,6 +166,12 @@ export async function onFirstProfile(user: User, profile: { id: string; displayN
       .returning({ id: guarantees.id });
     if (g) await notify(inviterUserId, { type: 'id', title: `${profile.displayName} با دعوت تو عضو بلوک شد`, body: 'قیم او شو تا اعتبار هر دو بیشتر شود؛ در «قیم و معرف» تأیید کن.', link: { screen: 'guar' } });
   }
+  // دور ۵۸: +۵ اعتبار برای هر دعوت موفق (تا ۷۵)؛ با دعوت دهم نشان «سفیر بلوک»
+  const ps = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, inviterUserId));
+  await recomputeTrust(ps.map((x) => x.id));
+  const [{ n }] = (await db.execute<{ n: number }>(sql`select ${invitesOf(sql`${inviterUserId}::uuid`)}::int as n`)).rows;
+  if (n === INVITE.ambassadorAt) await notify(inviterUserId, { type: 'star', title: 'تبریک! «سفیر بلوک» شدی', body: `${INVITE.ambassadorAt} نفر با دعوت تو عضو بلوک شدند؛ نشان سفیر روی پروفایلت نشست.`, link: { screen: 'trust' } });
+  else if (n * INVITE.bonus <= INVITE.max) await notify(inviterUserId, { type: 'star', title: `+${INVITE.bonus} امتیاز اعتبار برای دعوت`, body: `${profile.displayName} با دعوت تو عضو شد (دعوت موفق: ${n}).`, link: { screen: 'trust' } });
   await checkFounder(inviterUserId);
 }
 

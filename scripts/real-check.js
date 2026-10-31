@@ -135,6 +135,8 @@ const ROLES = {
     [S.invited,S.sess,S.team,S.cal,S.today,S.rec,S.arbQ,S.arbR,S.ans,S.hold,S.disp,S.arbJobs,S.out,typeof VISITS!=='undefined'&&VISITS,typeof KPRJ!=='undefined'&&KPRJ,typeof CPRJ!=='undefined'&&CPRJ,typeof EVIS!=='undefined'&&EVIS].forEach(x=>walk(x,0));return out})()`).forEach(add);
   // عنوان‌های عمومی اپ که در هر دو حالت هست، دادهٔ نمایشی نیستند
   for (const s of [...demo]) if (/^(کارگر|متخصص|مهندس|پیمانکار|کارفرما|شرکت ساختمانی)$/.test(s)) demo.delete(s);
+  // دور ۵۸: «پشتیبانی بلوک» نام واقعی گفت‌وگوی پشتیبانی است (ردیف ثابت پیام‌ها)، نه دادهٔ نمایشی
+  demo.delete('پشتیبانی بلوک');
   D.close();
   API = 'http://localhost:' + server.address().port;
   console.log('متن‌های نمایشی برای جست‌وجو:', demo.size);
