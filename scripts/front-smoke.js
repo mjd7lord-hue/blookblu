@@ -483,6 +483,11 @@ async function register(w, role, data) {
   B.document.querySelector('#s-msg .sup58').click();
   await until(() => ev(B, "S.cur==='chat' && (S.convs.find(c=>c.id===S.cid)||{}).type==='support'"), 'support chat from pinned row');
   log('پیام‌ها: ردیف ثابت «پشتیبانی بلوک» گفت‌وگوی پشتیبانی را باز کرد');
+  // دور ۵۹: تازه شدن صفحهٔ چت (پیام تازه/تازه‌سازی) متن در حال نوشتن را پاک نمی‌کند
+  ev(B, "(()=>{const x=document.getElementById('cIn');x.value='متن نیمه‌کاره';x.dispatchEvent(new Event('input',{bubbles:true}));renderChat()})()");
+  if (ev(B, "document.getElementById('cIn').value") !== 'متن نیمه‌کاره') throw new Error('متن در حال نوشتن با تازه شدن چت پاک شد');
+  ev(B, "(()=>{const x=document.getElementById('cIn');x.value='';x.dispatchEvent(new Event('input',{bubbles:true}))})()");
+  log('چت: متن در حال نوشتن با تازه شدن صفحه می‌ماند');
   ev(B, "openChat('c-support')");
   await until(() => ev(B, "S.cur==='chat' && (S.convs.find(c=>c.id===S.cid)||{}).type==='support'"), 'support chat');
   await ev(B, "LIVE.api('POST','/conversations/'+S.cid+'/messages',{kind:'text',body:'سلام، کد تأیید دیر می‌رسد'})");
