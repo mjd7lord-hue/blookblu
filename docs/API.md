@@ -647,9 +647,9 @@ snapshot `stats` هم `online, visits, funnel { views, responses, chats, deals, 
 
 | روش | مسیر | توضیح |
 |---|---|---|
-| GET | `/founders` (ورود اختیاری) | `{ on, open, cap, taken, left, perks, igUrl, me? }` — `me`: `{ steps: { follow, kyc, invite }, done, followedAt, invites, kycStatus, number, assignedAt, commissionFreeUntil, revoked, inviteCode }`؛ با هر بار خواندن اگر ۳ قدم کامل باشد شماره داده می‌شود |
+| GET | `/founders` (ورود اختیاری) | `{ on, open, cap, taken, left, perks, igUrl, need: 2, invite: { bonus, months, inviteeBonus }, me? }` — `me`: `{ steps: { follow, kyc, invite }, done, followedAt, invites, kycStatus, number, assignedAt, commissionFreeUntil, revoked, inviteCode, rewards: { trust, months } | null, profile }`؛ با هر بار خواندن اگر فالو + احراز هویت کامل باشد شماره داده می‌شود (دور ۶۰: دعوت اختیاری؛ هر دوستِ دعوت‌شدهٔ بنیان‌گذار = بنیان‌گذار +۱۰ اعتبار و ۲ ماه معافیت بیشتر، دوست +۱۰) |
 | POST | `/founders/follow` (ورود) | قدم ۱ (بدون بررسی؛ زمان اولین کلیک ذخیره می‌شود) ← همان وضعیت |
-| GET | `/admin/panel/founders` (users:1) | `{ stats: { users, follow, kyc, invite, done, all3, cap, on, left, conversion }, items: [{ id, phone, name, role, city, province, code, steps, followedAt, kycStatus, invites, number, assignedAt, commissionFreeUntil, manual, revokedAt, inviter }] }` |
+| GET | `/admin/panel/founders` (users:1) | `{ stats: { users, follow, kyc, invite, done, ready, founder_invites, all3, cap, on, left, conversion }, items: [{ id, phone, name, role, city, province, code, steps, followedAt, kycStatus, invites, number, assignedAt, commissionFreeUntil, manual, revokedAt, inviter }] }` |
 | POST | `/admin/panel/users/:userId/support` (support:2) | دور ۵۸: پیام پشتیبانی به هر کاربر `{ text, subject? }` ← گفت‌وگوی پشتیبانی او (پیدا یا ساخته) + اعلان؛ `201 { ticketId, code, conversationId }`؛ `NO_PROFILE` اگر ثبت‌نام کامل نیست. «مورد دیگر» در snapshot: `custom[].users = [{ userId, name, code, phone }]` |
 | POST | `/admin/panel/founders/:userId/grant` · `/revoke` (users:2) | اعطای دستی `{ number? }` (شمارهٔ انتخابی مدیر، یا کوچک‌ترین شمارهٔ آزاد؛ `FOUNDER_NUMBER_TAKEN`، `FOUNDER_NUMBER_RANGE`، `ALREADY_FOUNDER`، `FOUNDERS_FULL`) · لغو (`NOT_FOUNDER`؛ خودکار دوباره داده نمی‌شود) |
 | PUT | `/admin/panel/config/founders` (users:2) | `{ value: { on, cap, perks[], igUrl } }` |

@@ -18,7 +18,10 @@ import { logger } from '../../lib/logger';
  * - ۳ اخطار در ۲ ماه: «آماده به کار» و نیروی فوری ۷ روز بسته · ۵ اخطار فعال: حساب معلق تا بررسی مدیر.
  */
 // دور ۵۸: دعوت موفق = عضوی که با کد تو ثبت‌نام کامل کرده (فعال، غیرنمونه) ← +۵ تا ۷۵؛ ۱۰ دعوت = نشان «سفیر بلوک»
-export const INVITE = { bonus: 5, max: 75, ambassadorAt: 10 };
+// دور ۶۰: دعوت از طرف بنیان‌گذار (فقط ۱۰۰ نفر) ← دعوت‌کننده +۱۰ (به‌جای +۵؛ سقف ۷۵ ندارد) و ۲ ماه معافیت بیشتر، دعوت‌شده +۱۰
+export const INVITE = { bonus: 5, max: 75, ambassadorAt: 10, founderBonus: 10, founderMonths: 2, inviteeBonus: 10 };
+/** کاربر بنیان‌گذار فعال است؟ (SQL) */
+export const isFounderSql = (userCol: ReturnType<typeof sql>) => sql`exists (select 1 from founders ff where ff.user_id = ${userCol} and ff.number is not null)`;
 /** تعداد دعوت‌های موفق یک کاربر (SQL؛ userCol = ستون شناسهٔ کاربر) */
 export const invitesOf = (userCol: ReturnType<typeof sql>) => sql`(select count(*) from users iu where iu.invited_by = ${userCol} and iu.id <> ${userCol} and iu.status = 'active' and iu.phone not like '0900000%' and exists (select 1 from profiles ip where ip.user_id = iu.id))`;
 
@@ -33,15 +36,27 @@ export async function recomputeTrust(profileIds?: string[]) {
     (case when exists (select 1 from guarantees g where g.profile_id = "profiles"."id" and g.status = 'accepted') then ${STRIKE.guarantorBonus} else 0 end)
     -- دور ۳۹: هر پاسخ تخصصی که دست‌کم یک «مفید بود» گرفته +۱ (تا ۵)
     + least(${STRIKE.helpfulMax}, (select count(*) from ad_responses r join ads a on a.id = r.ad_id where r.profile_id = "profiles"."id" and a.type = 'consult' and exists (select 1 from answer_votes v where v.response_id = r.id and v.value > 0)))
-    + least(${INVITE.max}, ${INVITE.bonus} * ${invitesOf(sql`"profiles"."user_id"`)})
+    + (case when ${isFounderSql(sql`"profiles"."user_id"`)} then ${INVITE.founderBonus} * ${invitesOf(sql`"profiles"."user_id"`)}
+        else least(${INVITE.max}, ${INVITE.bonus} * ${invitesOf(sql`"profiles"."user_id"`)}) end)
+    + (case when exists (select 1 from users mu where mu.id = "profiles"."user_id" and mu.invited_by is not null and mu.invited_by <> mu.id and ${isFounderSql(sql`mu.invited_by`)}) then ${INVITE.inviteeBonus} else 0 end)
     - ${STRIKE.penalty} * (select count(*) from strikes s where s.profile_id = "profiles"."id" and s.status = 'confirmed' and s.expires_at > now())
     - ${STRIKE.guarantorPenalty} * (select count(*) from strikes s join guarantees g on g.profile_id = s.profile_id and g.status = 'accepted' and g.responded_at <= s.created_at
         where g.guarantor_user_id = "profiles"."user_id" and s.status = 'confirmed' and s.expires_at > now())
   )::smallint`;
   const where = profileIds
     ? inArray(profiles.id, profileIds)
-    : sql`(${profiles.trustAdj} <> 0 or exists (select 1 from guarantees g where g.profile_id = "profiles"."id" and g.status = 'accepted') or exists (select 1 from ad_responses r join answer_votes v on v.response_id = r.id where r.profile_id = "profiles"."id" and v.value > 0) or exists (select 1 from users iu where iu.invited_by = "profiles"."user_id"))`;
+    : sql`(${profiles.trustAdj} <> 0 or exists (select 1 from guarantees g where g.profile_id = "profiles"."id" and g.status = 'accepted') or exists (select 1 from ad_responses r join answer_votes v on v.response_id = r.id where r.profile_id = "profiles"."id" and v.value > 0) or exists (select 1 from users iu where iu.invited_by = "profiles"."user_id") or exists (select 1 from users mu where mu.id = "profiles"."user_id" and mu.invited_by is not null))`;
   await db.update(profiles).set({ trustAdj: adj }).where(where);
+}
+
+/** دور ۶۰: بازحساب اعتبار یک کاربر و همهٔ کسانی که دعوت کرده (بعد از گرفتن/لغو بنیان‌گذاری یا دعوت تازه) */
+export async function recomputeInviteFamily(userId: string) {
+  const rows = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .innerJoin(users, eq(users.id, profiles.userId))
+    .where(sql`${users.id} = ${userId} or ${users.invitedBy} = ${userId}`);
+  await recomputeTrust(rows.map((r) => r.id));
 }
 
 /** پروفایل‌های قیم‌های یک پروفایل (برای بازحساب بعد از اخطار) */

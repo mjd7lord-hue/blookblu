@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '../src/db';
-import { founders, guarantees, users } from '../src/db/schema';
+import { founders, guarantees, profiles, users } from '../src/db/schema';
 import { api, auth, FORMS, login, registered } from './helpers';
 
 async function admin() {
@@ -24,7 +24,7 @@ let adm: { token: string };
 afterAll(async () => { if (adm) await setCfg(adm, {}); });
 
 describe('founders campaign (round 54)', () => {
-  it('3 steps → founder number, invite rules, guarantor request, badge', async () => {
+  it('2 steps → founder number; optional invite rewards, guarantor request, badge', async () => {
     adm = await admin();
     const pub = (await api().get('/api/founders')).body;
     expect(pub).toMatchObject({ on: true, open: true, cap: 100 });
@@ -38,18 +38,29 @@ describe('founders campaign (round 54)', () => {
     const f1 = (await api().post('/api/founders/follow').set(auth(a.token))).body.me;
     expect(f1.steps.follow).toBe(true);
     expect(new Date(f1.followedAt).getTime()).toBeGreaterThan(Date.now() - 60_000);
-    // ۲) احراز هویت
+    expect((await api().get('/api/founders').set(auth(a.token))).body.me).toMatchObject({ done: 1, number: null });
+    // ۲) احراز هویت ← همین کافی است (دور ۶۰: دعوت اختیاری)
     await verify(a.profile.userId);
-    expect((await api().get('/api/founders').set(auth(a.token))).body.me).toMatchObject({ done: 2, number: null });
-
-    // ۳) دوست با کد دعوت ثبت‌نام می‌کند ← شماره بنیان‌گذار
-    const b = await invitedSignup(a.profile.code);
-    const s3 = (await api().get('/api/founders').set(auth(a.token))).body.me;
-    expect(s3).toMatchObject({ done: 3, invites: 1 });
-    expect(s3.number).toBeGreaterThanOrEqual(1);
-    const years = (new Date(s3.commissionFreeUntil).getTime() - new Date(s3.assignedAt).getTime()) / (365 * 86400_000);
+    const s2 = (await api().get('/api/founders').set(auth(a.token))).body;
+    expect(s2).toMatchObject({ need: 2, invite: { bonus: 10, months: 2, inviteeBonus: 10 } });
+    expect(s2.me).toMatchObject({ done: 2, invites: 0, rewards: { trust: 0, months: 0 } });
+    expect(s2.me.number).toBeGreaterThanOrEqual(1);
+    const years = (new Date(s2.me.commissionFreeUntil).getTime() - new Date(s2.me.assignedAt).getTime()) / (365 * 86400_000);
     expect(years).toBeGreaterThan(1.99);
     expect(years).toBeLessThan(2.01);
+
+    // دعوت اختیاری: دوست با کد دعوت ثبت‌نام می‌کند ← +۱۰ و ۲ ماه برای بنیان‌گذار، +۱۰ برای دوست
+    const adjOf = async (uid: string) => (await db.select({ a: profiles.trustAdj }).from(profiles).where(eq(profiles.userId, uid)))[0].a;
+    const b = await invitedSignup(a.profile.code);
+    const s3 = (await api().get('/api/founders').set(auth(a.token))).body.me;
+    expect(s3).toMatchObject({ done: 2, invites: 1, number: s2.me.number, rewards: { trust: 10, months: 2 } });
+    const extra = (new Date(s3.commissionFreeUntil).getTime() - new Date(s2.me.commissionFreeUntil).getTime()) / 86400_000;
+    expect(extra).toBeGreaterThan(58);
+    expect(extra).toBeLessThan(63);
+    expect(await adjOf(a.profile.userId)).toBe(10);
+    expect(await adjOf(b.profile.userId)).toBe(10);
+    const nb = await api().get('/api/notifications').set(auth(b.token));
+    expect(nb.body.items.some((x: { title: string }) => x.title.includes('هدیهٔ دعوت'))).toBe(true);
     // دور ۵۷: بنیان‌گذار بدون عکس و معرفی ← پیام تکمیل پروفایل
     expect(s3.profile).toMatchObject({ photo: false, complete: false });
     const nf = await api().get('/api/notifications').set(auth(a.token));
@@ -80,8 +91,14 @@ describe('founders campaign (round 54)', () => {
     expect(list.body.stats.done).toBeGreaterThanOrEqual(1);
     expect(list.body.stats.cap).toBe(100);
 
+    expect(list.body.stats.ready).toBeGreaterThanOrEqual(1);
+    expect(list.body.stats.founder_invites).toBeGreaterThanOrEqual(1);
+
     await api().post(`/api/admin/panel/founders/${a.profile.userId}/revoke`).set(auth(adm.token)).expect(200);
     expect((await api().get('/api/founders').set(auth(a.token))).body.me).toMatchObject({ number: null, revoked: true });
+    // لغو ← جایزهٔ بنیان‌گذار برمی‌گردد (دعوت عادی +۵)
+    expect(await adjOf(a.profile.userId)).toBe(5);
+    expect(await adjOf(b.profile.userId)).toBe(0);
     const gr = await api().post(`/api/admin/panel/founders/${b.profile.userId}/grant`).set(auth(adm.token));
     expect(gr.body.number).toBeGreaterThanOrEqual(1);
     expect((await db.select().from(founders).where(eq(founders.userId, b.profile.userId)))[0].manual).toBe(true);
@@ -108,10 +125,9 @@ describe('founders campaign (round 54)', () => {
     for (let i = 0; i < 5; i++) {
       const p = await registered('worker');
       await api().post('/api/founders/follow').set(auth(p.token)).expect(200);
-      await verify(p.profile.userId);
-      await invitedSignup(p.profile.code);
       people.push(p);
     }
+    await Promise.all(people.map((p) => verify(p.profile.userId)));
     const res = await Promise.all(people.map((p) => api().get('/api/founders').set(auth(p.token))));
     const nums = res.map((r) => r.body.me.number).filter((n) => n != null);
     expect(nums).toHaveLength(3);

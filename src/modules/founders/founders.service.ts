@@ -2,8 +2,9 @@
  * کمپین «۱۰۰ عضو بنیان‌گذار» (دور ۵۴)
  *   مرحله ۱: «فالو کردم» (بدون بررسی؛ زمان کلیک ذخیره می‌شود)
  *   مرحله ۲: احراز هویت (users.kyc_status = verified)
- *   مرحله ۳: دست‌کم یک دوست با لینک دعوت ثبت‌نام کامل کرده باشد (users.invited_by، فقط یک بار و نه از خود)
- * با هر ۳ مرحله ← کوچک‌ترین شمارهٔ آزاد ۱..ظرفیت در تراکنش با قفل (+ ایندکس یکتا) و ۲ سال معافیت از کمیسیون.
+ * با هر ۲ مرحله ← کوچک‌ترین شمارهٔ آزاد ۱..ظرفیت در تراکنش با قفل (+ ایندکس یکتا) و ۲ سال معافیت از کمیسیون.
+ * دور ۶۰: دعوت دوست اختیاری است (users.invited_by، فقط یک بار و نه از خود)؛ برای هر دوستِ دعوت‌شدهٔ بنیان‌گذار:
+ *   دعوت‌کننده +۱۰ اعتبار و ۲ ماه معافیت بیشتر، دعوت‌شده +۱۰ اعتبار (INVITE در strikes.ts).
  * ظرفیت پر یا کمپین خاموش ← چک‌لیست پنهان. تنظیمات: cfg('founders') از پنل.
  */
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
@@ -14,7 +15,7 @@ import { badRequest, conflict, notFound } from '../../lib/errors';
 import { logger } from '../../lib/logger';
 import { SAMPLE_PREFIX } from '../../lib/samples';
 import { notify } from '../notifications/notify';
-import { INVITE, invitesOf, recomputeTrust } from '../trust/strikes';
+import { INVITE, invitesOf, recomputeInviteFamily, recomputeTrust } from '../trust/strikes';
 
 type User = typeof users.$inferSelect;
 const LOCK = 54_100; // کلید قفل تراکنشی اختصاص شماره
@@ -40,11 +41,13 @@ async function stepsOf(userId: string) {
     .limit(1);
   if (!u) throw notFound('کاربر پیدا نشد');
   const s = { follow: !!u.followedAt, kyc: u.kyc === 'verified', invite: u.invites > 0 };
-  return { ...u, steps: s, done: Number(s.follow) + Number(s.kyc) + Number(s.invite) };
+  // دور ۶۰: فقط فالو و احراز هویت لازم است؛ دعوت اختیاری (جایزه دارد)
+  return { ...u, steps: s, done: Number(s.follow) + Number(s.kyc) };
 }
 
 /** کوچک‌ترین شمارهٔ آزاد (یا شمارهٔ انتخابی مدیر) را در تراکنش قفل‌دار می‌دهد؛ اگر پر است null */
 async function assign(userId: string, manual: boolean, wanted?: number) {
+  const [{ inv }] = (await db.execute<{ inv: number }>(sql`select ${invitesOf(sql`${userId}::uuid`)}::int as inv`)).rows;
   const cap = conf().cap;
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${LOCK})`);
@@ -64,6 +67,7 @@ async function assign(userId: string, manual: boolean, wanted?: number) {
     if (!n) return null;
     const now = new Date(), until = new Date(now);
     until.setFullYear(until.getFullYear() + FREE_YEARS);
+    until.setMonth(until.getMonth() + INVITE.founderMonths * inv); // دعوت‌های قبلی هم حساب است
     await tx
       .insert(founders)
       .values({ userId, number: n, assignedAt: now, commissionFreeUntil: until, manual })
@@ -72,17 +76,18 @@ async function assign(userId: string, manual: boolean, wanted?: number) {
   });
 }
 
-/** اگر هر ۳ مرحله کامل است و جا هست، شماره بده (بی‌خطر برای صدا زدن چندباره) */
+/** اگر هر ۲ مرحله کامل است و جا هست، شماره بده (بی‌خطر برای صدا زدن چندباره) */
 export async function checkFounder(userId: string) {
   try {
     if (!conf().on) return null;
     const s = await stepsOf(userId);
     if (s.number) return s.number;
-    if (s.revokedAt || s.done < 3) return null; // لغو دستی مدیر ← خودکار دوباره داده نمی‌شود
+    if (s.revokedAt || !s.steps.follow || !s.steps.kyc) return null; // لغو دستی مدیر ← خودکار دوباره داده نمی‌شود
     const r = await assign(userId, false);
     if (r?.fresh) {
       logger.info({ userId, number: r.number }, 'founder assigned');
-      await notify(userId, { type: 'id', title: `تبریک! تو عضو بنیان‌گذار #${r.number} بلوک شدی`, body: 'نشان بنیان‌گذار روی پروفایلت نشست و ۲ سال از کمیسیون بلوک معافی.', link: { screen: 'home' } });
+      await notify(userId, { type: 'id', title: `تبریک! تو عضو بنیان‌گذار #${r.number} بلوک شدی`, body: `نشان بنیان‌گذار روی پروفایلت نشست و ۲ سال از کمیسیون بلوک معافی. هر دوستی دعوت کنی: +${INVITE.founderBonus} امتیاز و ${INVITE.founderMonths} ماه معافیت بیشتر برای تو، +${INVITE.inviteeBonus} امتیاز برای دوستت.`, link: { screen: 'home' } });
+      await recomputeInviteFamily(userId);
       await nudgeProfile(userId);
     }
     return r?.number ?? null;
@@ -121,7 +126,10 @@ export async function nudgeProfile(userId: string) {
 export async function status(user?: User) {
   const c = conf();
   const t = await taken();
-  const out: Record<string, unknown> = { on: c.on, open: c.on && t < c.cap, cap: c.cap, taken: t, left: Math.max(0, c.cap - t), perks: c.perks, igUrl: c.igUrl };
+  const out: Record<string, unknown> = {
+    on: c.on, open: c.on && t < c.cap, cap: c.cap, taken: t, left: Math.max(0, c.cap - t), perks: c.perks, igUrl: c.igUrl,
+    need: 2, invite: { bonus: INVITE.founderBonus, months: INVITE.founderMonths, inviteeBonus: INVITE.inviteeBonus },
+  };
   if (!user) return out;
   await checkFounder(user.id);
   const s = await stepsOf(user.id);
@@ -131,6 +139,8 @@ export async function status(user?: User) {
     steps: s.steps, done: s.done, followedAt: s.followedAt, invites: s.invites, kycStatus: s.kyc,
     number: s.number, assignedAt: s.assignedAt, commissionFreeUntil: s.until, revoked: !!s.revokedAt,
     inviteCode: p?.code ?? null,
+    // دور ۶۰: جایزهٔ دعوت‌ها (فقط وقتی بنیان‌گذار است)
+    rewards: s.number ? { trust: INVITE.founderBonus * s.invites, months: INVITE.founderMonths * s.invites } : null,
     // دور ۵۷: بنیان‌گذار باید پروفایلش کامل باشد (عکس و معرفی)
     profile: pr,
   };
@@ -147,7 +157,7 @@ export async function follow(user: User) {
 
 /**
  * ثبت‌نام اول کاربر با کد دعوت (فیلد «معرف»): دعوت‌کننده یک بار ثبت می‌شود،
- * دعوت‌کننده به‌عنوان قیم پیشنهاد می‌شود (خودش با کد پیامکی تأیید می‌کند) و مرحلهٔ ۳ او بررسی می‌شود.
+ * دعوت‌کننده به‌عنوان قیم پیشنهاد می‌شود (خودش با کد پیامکی تأیید می‌کند)؛ اگر بنیان‌گذار است جایزهٔ دعوت می‌گیرد.
  */
 export async function onFirstProfile(user: User, profile: { id: string; displayName: string }, inviterUserId: string) {
   if (inviterUserId === user.id) return;
@@ -167,11 +177,23 @@ export async function onFirstProfile(user: User, profile: { id: string; displayN
     if (g) await notify(inviterUserId, { type: 'id', title: `${profile.displayName} با دعوت تو عضو بلوک شد`, body: 'قیم او شو تا اعتبار هر دو بیشتر شود؛ در «قیم و معرف» تأیید کن.', link: { screen: 'guar' } });
   }
   // دور ۵۸: +۵ اعتبار برای هر دعوت موفق (تا ۷۵)؛ با دعوت دهم نشان «سفیر بلوک»
-  const ps = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, inviterUserId));
+  // دور ۶۰: دعوت‌کنندهٔ بنیان‌گذار ← +۱۰ و ۲ ماه معافیت بیشتر؛ دعوت‌شده +۱۰
+  const [fd] = await db.select({ n: founders.number }).from(founders).where(and(eq(founders.userId, inviterUserId), isNotNull(founders.number))).limit(1);
+  if (fd) {
+    await db
+      .update(founders)
+      .set({ commissionFreeUntil: sql`coalesce(${founders.commissionFreeUntil}, now()) + make_interval(months => ${INVITE.founderMonths})`, updatedAt: new Date() })
+      .where(eq(founders.userId, inviterUserId));
+  }
+  const ps = await db.select({ id: profiles.id }).from(profiles).where(sql`${profiles.userId} in (${inviterUserId}, ${user.id})`);
   await recomputeTrust(ps.map((x) => x.id));
   const [{ n }] = (await db.execute<{ n: number }>(sql`select ${invitesOf(sql`${inviterUserId}::uuid`)}::int as n`)).rows;
+  if (fd) {
+    await notify(inviterUserId, { type: 'star', title: `+${INVITE.founderBonus} امتیاز و ${INVITE.founderMonths} ماه معافیت بیشتر`, body: `${profile.displayName} با دعوت تو عضو شد (دعوت موفق: ${n}). جایزهٔ بنیان‌گذار برای دعوت.`, link: { screen: 'home' } });
+    await notify(user.id, { type: 'star', title: `+${INVITE.inviteeBonus} امتیاز اعتبار هدیهٔ دعوت`, body: `با دعوت ${inv?.name || 'یک عضو بنیان‌گذار'} عضو شدی و ${INVITE.inviteeBonus} امتیاز اعتبار گرفتی.`, link: { screen: 'trust' } });
+  }
   if (n === INVITE.ambassadorAt) await notify(inviterUserId, { type: 'star', title: 'تبریک! «سفیر بلوک» شدی', body: `${INVITE.ambassadorAt} نفر با دعوت تو عضو بلوک شدند؛ نشان سفیر روی پروفایلت نشست.`, link: { screen: 'trust' } });
-  else if (n * INVITE.bonus <= INVITE.max) await notify(inviterUserId, { type: 'star', title: `+${INVITE.bonus} امتیاز اعتبار برای دعوت`, body: `${profile.displayName} با دعوت تو عضو شد (دعوت موفق: ${n}).`, link: { screen: 'trust' } });
+  else if (!fd && n * INVITE.bonus <= INVITE.max) await notify(inviterUserId, { type: 'star', title: `+${INVITE.bonus} امتیاز اعتبار برای دعوت`, body: `${profile.displayName} با دعوت تو عضو شد (دعوت موفق: ${n}).`, link: { screen: 'trust' } });
   await checkFounder(inviterUserId);
 }
 
@@ -206,17 +228,18 @@ export async function adminList() {
 export async function adminStats() {
   const c = conf();
   const [r] = (
-    await db.execute<{ users: number; follow: number; kyc: number; invite: number; done: number; all3: number }>(sql`
+    await db.execute<{ users: number; follow: number; kyc: number; invite: number; done: number; ready: number }>(sql`
       select count(*)::int as users,
         count(*) filter (where f.followed_at is not null)::int as follow,
         count(*) filter (where u.kyc_status = 'verified')::int as kyc,
         count(*) filter (where exists (select 1 from users iu where iu.invited_by = u.id and iu.status = 'active' and exists (select 1 from profiles ip where ip.user_id = iu.id)))::int as invite,
         count(*) filter (where f.number is not null)::int as done,
-        count(*) filter (where f.followed_at is not null and u.kyc_status = 'verified' and exists (select 1 from users iu where iu.invited_by = u.id and iu.status = 'active' and exists (select 1 from profiles ip where ip.user_id = iu.id)))::int as all3
+        count(*) filter (where f.followed_at is not null and u.kyc_status = 'verified')::int as ready,
+        (select count(*) from users iu join founders fi on fi.user_id = iu.invited_by and fi.number is not null where iu.status = 'active' and exists (select 1 from profiles ip where ip.user_id = iu.id))::int as founder_invites
       from users u left join founders f on f.user_id = u.id
       where u.status = 'active' and u.phone not like ${SAMPLE_PREFIX + '%'} and exists (select 1 from profiles p where p.user_id = u.id)`)
   ).rows;
-  return { ...r, cap: c.cap, on: c.on, left: Math.max(0, c.cap - r.done), conversion: r.users ? Math.round((r.done / r.users) * 1000) / 10 : 0 };
+  return { ...r, all3: r.ready, cap: c.cap, on: c.on, left: Math.max(0, c.cap - r.done), conversion: r.users ? Math.round((r.done / r.users) * 1000) / 10 : 0 };
 }
 
 export async function adminGrant(userId: string, wanted?: number) {
@@ -228,6 +251,7 @@ export async function adminGrant(userId: string, wanted?: number) {
   if (!r) throw conflict('ظرفیت بنیان‌گذاران پر است؛ اول ظرفیت را در تنظیمات بیشتر کن', 'FOUNDERS_FULL');
   if (r.fresh) {
     await notify(userId, { type: 'id', title: `تبریک! تو عضو بنیان‌گذار #${r.number} بلوک شدی`, body: 'نشان بنیان‌گذار روی پروفایلت نشست.', link: { screen: 'home' } });
+    await recomputeInviteFamily(userId);
     await nudgeProfile(userId);
   }
   return r.number;
@@ -240,6 +264,7 @@ export async function adminRevoke(userId: string) {
     .where(and(eq(founders.userId, userId), isNotNull(founders.number)))
     .returning({ id: founders.userId });
   if (!r.length) throw conflict('این کاربر بنیان‌گذار نیست', 'NOT_FOUNDER');
+  await recomputeInviteFamily(userId); // جایزهٔ دعوت بنیان‌گذار برمی‌گردد
 }
 
 /** شمارهٔ بنیان‌گذار برای نمایش نشان روی پروفایل‌ها */
